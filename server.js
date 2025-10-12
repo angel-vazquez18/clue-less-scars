@@ -125,36 +125,109 @@ async function handleMessage(ws, env) {
 		case 'JOIN_GAME':
 			await processJoinGame(ws, game, payload, requestId);
 			break;
-		case 'START_GAME':
-			await processStartGame(ws, game, payload, requestId);
-			break;
 		case 'SELECT_CHARACTER':
-			await processSelectCharacter(ws, game, payload, requestId);
-			break;
+			return processSelectCharacter(game, player, payload, requestId);
+		case 'START_GAME':
+			return processStartGame(game, player, requestId);
 		case 'REQUEST_MOVE':
-			await processRequestMove(ws, game, payload, requestId);
-			break;
+			return processRequestMove(game, player, payload, requestId);
 		case 'MAKE_SUGGESTION':
-			await processMakeSuggestion(ws, game, payload, requestId);
-			break;
-		case 'RESPOND_DISPROVAL':
-			await processRespondDisproval(ws, game, payload, requestId);
-			break;
+			return processMakeSuggestion(game, player, payload, requestId);
+		case 'RESPOND_DISPROVE':
+			return processRespondDisprove(game, player, payload, requestId);
 		case 'MAKE_ACCUSATION':
-			await processMakeAccusation(ws, game, payload, requestId);
-			break;
+			return processMakeAccusation(game, player, payload, requestId);
 		case 'CHAT':
-			await processChat(ws, game, payload, requestId);
-			break;
+			return processChat(game, player, payload, requestId);
 		case 'PING':
-			sendWs(ws, makeEnv('PONG', gameId, {}, requestId));
-			break;
+			return processPing(ws, gameId, payload, requestId);
 		default:
 			sendWs(ws, makeEnv('ERROR', gameId, { code: 'UNKNOWN_TYPE', message: 'Unknown message type: ${type}' }, requestId));
 	}
-
-	
-
-
 }
 
+async function processJoinGame(ws, game, payload, requestId) {
+	const { name } = payload;
+	if (!name || typeof name !== 'string' || name.length < 1 || name.lenght > 32) {
+		sendWs(ws, makeEnv('ERROR', game.id, { code: 'INVALID_NAME', message: 'Name must be 1-32 characters' }, requestId));
+		return;
+	}
+
+	const player = addPlayer(game, name, ws);
+	
+	// send YOUR_HAND
+	sendWs(ws, makeEnv('YOUR_HAND', game.id, { cards: player.hand, }, requestId));
+
+	// send GAME_STATe to joining player
+	sendWs(ws, makeEnv('GAME_STATE', game.id, {
+		board: game.board,
+		players: Object.values(game.players).map(p => ({ id: p.id, name: p.name, characterId: p.characterId})),
+		you: { playerId: player.id, name: player.name, characterId: player.characterId },
+		turn: game.turnOrder[game.turnIndex],
+	}, requestId));
+
+	// broadcast PLAYER_JOINED to all
+	broadcastGame(game.id, 'PLAYER_JOINED', { playerId: player.id, name: player.name });
+}	
+
+async function processSelectCharacter(game, player, payload, requestId) {
+	if (!player) {
+		return broadcastErrorToWs(null, 'NOT_JOINED', 'You must JOIN_GAME first', game.id, requestId);
+	}
+	const { characterId } = payload || {};
+	if (!characterId || typeof characterId !== 'string') {
+		sendWs(player.ws, makeEnv('ERROR', game.id, { code: 'INVALID_CHARACTER', message: 'characterId must be non-empty string' }, requestId));
+		return;
+	}
+	// uniqueness check (naive)
+	const already = Object.values(game.players).find(p => p.characterId === characterId);
+	if (already) {
+		sendWs(player.ws, makeEnv('ERROR', game.id, { code: 'CHARACTER_TAKEN', message: 'Character already taken' }, requestId));
+		return;
+	}
+	player.characterId = characterId;
+	broadcastGame(game.id, 'CHARACTER_SELECTED', { playerId: player.id, characterId });
+}
+
+async function processStartGame(game, player, payload, requestId) {
+	// Start game only if game isn't started already
+	if (game.started) {
+    	if (player && player.ws) {
+			sendWs(player.ws, makeEnvelope('ERROR', game.id, { code: 'ALREADY_STARTED', message: 'Game already started' }, requestId));
+		}
+	}
+
+	// ensure more than 1 player
+	if (Object.keys(game.players).length < 2) {
+		if (player && player.ws) {
+			sendWs(player.ws, makeEnvelope('ERROR', game.id, { code: 'NOT_ENOUGH_PLAYERS', message: 'At least 2 players required to start' }, requestId));
+		}
+		return;
+	}
+
+	// assign start hands and soltuion
+	const cards =  ['suspect1','suspect2','suspect3','weapon1','weapon2','weapon3','room1','room2','room3'];
+	game.solution = {
+		suspectId: cards.find(c => c.startsWith('suspect')),
+		weaponId: cards.find(c => c.startsWith('weapon')),
+		roomId: cards.find(c => c.startsWith('room'))
+  	};
+	
+	//distribute cards
+	for (const pid of Object.keys(game.players)) {
+    	game.players[pid].hand = []; // assign cards later if needed
+  	}
+	game.started = true;
+	broadcastGame(game.id, 'GAME_STARTED', {});
+	// notify each player of their hand
+	for (const pId in game.players) {
+		const p = game.players[pId];
+		sendWs(p.ws, makeEnvelope('YOUR_HAND', game.id, { cards: p.hand }));
+	}
+	// turn start
+	const currentPlayerId = game.turnOrder[game.turnIndex];
+	broadcastGame(game.id, 'TURN_START', { playerId: currentPlayerId });
+}
+
+
+	
