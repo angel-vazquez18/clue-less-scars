@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: clue-less-server:dev
+    container_name: clue-less-server
+    environment:
+      - PORT=8080
+      - NODE_ENV=development
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./server:/app/server
+      - /app/server/node_modules
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 2s
+      retries: 5
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    image: clue-less-web:dev
+    container_name: clue-less-web
+    environment:
+      # Use the host-mapped port so the browser can reach it
+      - VITE_WS_URL=ws://localhost:8080
+    ports:
+      - "5173:5173"
+    depends_on:
+      server:
+        condition: service_healthy
+    volumes:
+      - ./web:/app/web
+      - /app/web/node_modules
