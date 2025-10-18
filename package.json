@@ -5,6 +5,7 @@
   "scripts": {
     "dev:up": "docker compose up --build",
     "dev:down": "docker compose down -v"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "uuid": "^9.0.0",
