@@ -1,0 +1,9 @@
+{
+  "name": "clue-less",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "dev:up": "docker compose up --build",
+    "dev:down": "docker compose down -v"
+  }
+}
