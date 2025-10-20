@@ -3,13 +3,18 @@
     "private": true,
     "type": "commonjs",
     "scripts": {
-      "dev": "nodemon server.js",
-      "start": "node server.js"
+      "dev": "nodemon index.js",
+      "start": "node index.js",
+      "test": "node test/run-tests.js",
+      "test:envelope": "node test/envelope.test.js",
+      "test:handlers": "node test/handlers.test.js",
+      "test:integration": "node test/integration.test.js"
     },
     "dependencies": {
       "express": "^4.19.2",
       "uuid": "^9.0.1",
-      "ws": "^8.18.0"
+      "ws": "^8.18.0",
+      "body-parser": "^1.20.2"
     },
     "devDependencies": {
       "nodemon": "^3.1.4"
