@@ -242,6 +242,38 @@ The web UI demonstrates:
 
 ## Development
 
+### Recommended VS Code Extensions
+
+For the best development experience, install these extensions:
+
+**Essential:**
+- **ES7+ React/Redux/React-Native snippets** (`dsznajder.es7-react-js-snippets`) - React code snippets
+- **ESLint** (`dbaeumer.vscode-eslint`) - JavaScript linting
+- **Prettier** (`esbenp.prettier-vscode`) - Code formatting
+- **Docker** (`ms-azuretools.vscode-docker`) - Docker support
+
+**Helpful:**
+- **Markdown Preview Mermaid Support** (`bierner.markdown-mermaid`) - View architecture diagrams
+- **GitLens** (`eamodio.gitlens`) - Enhanced Git integration
+- **Thunder Client** (`rangav.vscode-thunder-client`) - API testing
+- **Error Lens** (`usernamehw.errorlens`) - Inline error display
+
+**Optional:**
+- **Auto Rename Tag** (`formulahendry.auto-rename-tag`) - HTML/JSX tag renaming
+- **Color Highlight** (`naumovs.color-highlight`) - CSS color preview
+- **Path Intellisense** (`christian-kohler.path-intellisense`) - File path autocomplete
+- **npm Intellisense** (`christian-kohler.npm-intellisense`) - NPM module imports
+
+### Quick Install (VS Code)
+
+**Automatic (Recommended):**
+When you open this project in VS Code, you'll see a notification to install recommended extensions. Click "Install All" to get all extensions at once.
+
+**Manual:**
+Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on Mac), type "Extensions: Install Extensions", then search for each extension by name.
+
+**Note:** Extension recommendations are configured in `.vscode/extensions.json`
+
 ### Project Structure
 
 ```
