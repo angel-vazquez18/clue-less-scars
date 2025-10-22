@@ -2,7 +2,7 @@
 .app {
   min-height: 100vh;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   display: flex;
   flex-direction: column;
 }
@@ -57,7 +57,7 @@
   border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   font-size: 0.9rem;
   color: #333;
   min-width: 200px;
@@ -378,7 +378,7 @@
 }
 
 .character-option.selected::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   background: rgba(255, 255, 255, 0.1);
@@ -447,7 +447,8 @@
   transform: translateY(-2px);
 }
 
-.game-status, .waiting-players {
+.game-status,
+.waiting-players {
   margin-top: 1rem;
   padding: 1rem;
   background: rgba(76, 175, 80, 0.1);
@@ -489,7 +490,8 @@
   padding-bottom: 0.5rem;
 }
 
-.lobby-view, .game-view {
+.lobby-view,
+.game-view {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -505,9 +507,16 @@
 
 .board-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(5, 1fr);
   gap: 1rem;
+  row-gap: 0px;
   margin-top: 1rem;
+}
+
+.board-rows {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  row-gap: 0px;
 }
 
 .room-cell {
@@ -516,6 +525,35 @@
   border: 2px solid #ddd;
   border-radius: 8px;
   text-align: center;
+  align-items: center;
+  align-self: center;
+}
+
+.hall-cell {
+  justify-content: center;
+  align-items: center;
+  align-self: center;
+  background: #667eea;
+  border-top: 2px solid #333;
+  border-bottom: 2px solid #333;
+  color: #667eea;
+}
+
+.vertical-hall {
+  justify-content: center;
+  align-items: center;
+  color: #667eea;
+  margin-left: 3.5em;
+  margin-right: 30px;
+  width: 20px;
+  border-left: 2px solid #333;
+  border-right: 2px solid #333;
+  background-color: #667eea;
+  writing-mode: vertical-rl;
+}
+
+.empty-grid {
+  opacity: 0;
 }
 
 .room-name {
@@ -591,7 +629,8 @@
   padding-bottom: 0.5rem;
 }
 
-.basic-controls, .game-controls {
+.basic-controls,
+.game-controls {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
@@ -854,7 +893,7 @@
 .message-text {
   margin: 0;
   white-space: pre-wrap;
-  font-family: 'Courier New', monospace;
+  font-family: "Courier New", monospace;
   font-size: 0.9rem;
   line-height: 1.4;
   color: #333;
@@ -875,52 +914,53 @@
     gap: 1rem;
     min-height: auto;
   }
-  
+
   .header-info {
     flex-direction: column;
     gap: 1rem;
     width: 100%;
   }
-  
+
   .game-id-display {
     width: 100%;
   }
-  
+
   .game-id-input {
     min-width: 150px;
     flex: 1;
   }
-  
+
   .game-container {
     grid-template-columns: 1fr;
     height: auto;
     min-height: 500px;
   }
-  
+
   .app-main {
     padding: 1rem;
   }
-  
+
   .reference-sections {
     grid-template-columns: 1fr;
   }
-  
+
   .character-options {
     grid-template-columns: 1fr;
   }
-  
-  .basic-controls, .game-controls {
+
+  .basic-controls,
+  .game-controls {
     flex-direction: column;
   }
-  
+
   .control-btn {
     width: 100%;
   }
-  
+
   .message-log {
     max-height: 250px;
   }
-  
+
   .message-list {
     max-height: 200px;
   }
