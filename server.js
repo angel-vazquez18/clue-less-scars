@@ -144,6 +144,8 @@ async function handleMessage(ws, env) {
 			return processChat(game, player, payload, requestId);
 		case 'PING':
 			return processPing(ws, gameId, payload, requestId);
+		case 'END_TURN':
+  			return processEndTurn(game, player, requestId);
 		default:
 			console.warn(`[${gameId}] Unknown message type from player ${player?.name || 'unknown'}: ${type}`);
 			sendWs(ws, makeEnv('ERROR', gameId, { 
@@ -151,13 +153,27 @@ async function handleMessage(ws, env) {
 				message: `Unknown message type: ${type}` 
 			}, requestId));
 	}
+	if (game && player) {
+		game.lastAction = {
+			playerId: player.id,
+			playerName: player.name,
+			type,
+			payload,
+			ts: new Date().toISOString(),
+		};
+		console.log(`[ACTION] ${player.name} performed ${type}`);
+	}
 }
 
 async function processJoinGame(ws, game, payload, requestId) {
 	const { name } = payload;
 	if (!name || typeof name !== 'string' || name.length < 1 || name.length > 32) {
 		sendWs(ws, makeEnv('ERROR',  game.gameId, { code: 'INVALID_NAME', message: 'Name must be 1-32 characters' }, requestId));
-		return;
+		return; 
+	}
+	if (game.started) {
+  		const currentPlayerId = getCurrentPlayerId(game);
+  		sendWs(ws, makeEnv('TURN_START', game.gameId, { playerId: currentPlayerId }));
 	}
 
 	const player = addPlayer(game, name, ws);
@@ -197,12 +213,13 @@ function processSelectCharacter(game, player, payload, requestId) {
 	broadcastGame( game.gameId, 'CHARACTER_SELECTED', { playerId: player.id, characterId });
 }
 
-function processStartGame(game, player, payload, requestId) {
+function processStartGame(game, player, payload, requestId) {	
 	// Start game only if game isn't started already
 	if (game.started) {
     	if (player && player.ws) {
 			sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'ALREADY_STARTED', message: 'Game already started' }, requestId));
 		}
+		return;
 	}
 
 	// ensure more than 1 player
@@ -234,6 +251,9 @@ function processStartGame(game, player, payload, requestId) {
 	}
 	// turn start
 	const currentPlayerId = game.turnOrder[game.turnIndex];
+	// Log the turn order and starting player
+	console.log(`[TURN_ORDER] ${game.turnOrder.map(id => game.players[id].name).join(' -> ')}`);
+	console.log(`[TURN] Starting with ${game.players[currentPlayerId].name}`);
 	broadcastGame( game.gameId, 'TURN_START', { playerId: currentPlayerId });
 }
 
@@ -243,6 +263,10 @@ function processRequestMove(game, player, payload, requestId) {
 	}
 	if (!game.started) {
 		sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'GAME_NOT_STARTED', message: 'Game has not started' }, requestId));
+		return;
+	}
+	if (!isPlayersTurn(game, player.id)) {
+		sendWs(player.ws, makeEnv('ERROR', game.gameId, { code: 'NOT_YOUR_TURN', message: 'It is not your turn' }, requestId));
 		return;
 	}
 	const { to, targetId, useSecretPassage } = payload || {};
@@ -261,6 +285,10 @@ function processMakeSuggestion(game, player, payload, requestId) {
 	}
 	if (!game.started) {
 		sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'GAME_NOT_STARTED', message: 'Game has not started' }, requestId));
+		return;
+	}
+	if (!isPlayersTurn(game, player.id)) {
+		sendWs(player.ws, makeEnv('ERROR', game.gameId, { code: 'NOT_YOUR_TURN', message: 'It is not your turn' }, requestId));
 		return;
 	}
 	const { suspectId, weaponId } = payload || {};
@@ -310,6 +338,10 @@ function processMakeAccusation(game, player, payload, requestId) {
 	if (!player) {
 		return sendError(null, 'NOT_JOINED', 'You must JOIN_GAME first', game.gameId, requestId);
 	}
+	if (!isPlayersTurn(game, player.id)) {
+		sendWs(player.ws, makeEnv('ERROR', game.gameId, { code: 'NOT_YOUR_TURN', message: 'It is not your turn' }, requestId));
+		return;
+	}
 	const { suspectId, weaponId, roomId } = payload || {};
 	if (!suspectId || !weaponId || !roomId) {
 		sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'INVALID_ACCUSATION', message: 'must include suspectId, weaponId, roomId' }, requestId));
@@ -355,6 +387,14 @@ function processPing(ws, gameId, payload, requestId) {
 	const { seq } = payload || {};
 	sendWs(ws,  makeEnv('PING', gameId, { seq }, requestId));
 }
+
+function processEndTurn(game, player, requestId) {
+	if (!isPlayersTurn(game, player.id)) {
+		sendWs(player.ws, makeEnv('ERROR', game.gameId, { code: 'NOT_YOUR_TURN', message: 'Not your turn' }, requestId));
+		return;
+	}
+  nextTurn(game);
+}
 	
 // Helper senders
 
@@ -382,6 +422,33 @@ function computeDisproveOrder(game, fromPlayerId) {
 	return order;
 }
 
+// ---- TURN SYSTEM HELPERS ----
+function getCurrentPlayerId(game) {
+	return game.turnOrder[game.turnIndex];
+}
+
+function isPlayersTurn(game, playerId) {
+	return getCurrentPlayerId(game) === playerId;
+}
+
+function nextTurn(game) {
+  if (!game.started || game.turnOrder.length === 0) return;
+  
+  let loops = 0;
+  do {
+    game.turnIndex = (game.turnIndex + 1) % game.turnOrder.length;
+    loops++;
+  } while (game.players[getCurrentPlayerId(game)]?.eliminated && loops < game.turnOrder.length);
+  
+  const currentPlayerId = getCurrentPlayerId(game);
+  console.log(`[TURN] It is now ${game.players[currentPlayerId].name}'s turn`);
+  broadcastGame(game.gameId, 'TURN_START', { playerId: currentPlayerId });
+}
+
+
+
+
+
 //WebSocket Server Setup
 
 const wss = new WebSocket.Server({ port: PORT }, () => {
@@ -406,6 +473,10 @@ wss.on('connection', (ws, req) => {
 		for (const g of Object.values(games)) {
 			for (const pId in g.players) {
 				const p = g.players[pId];
+				if (g.turnOrder[g.turnIndex] === pId) {
+					console.log(`[TURN] ${p.name} disconnected during their turn — skipping to next player`);
+					nextTurn(g);
+				}
 				if (p.ws === ws) {
 					p.ws = null;
 					console.log(`[${g.gameId}] Player disconnected: ${p.name} (${p.id})`);
