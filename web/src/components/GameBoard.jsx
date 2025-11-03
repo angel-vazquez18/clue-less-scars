@@ -151,19 +151,6 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
     );
   };
 
-  const changeRefItemColor = (e) => {
-    const refItem = e.target;
-    if (refItem.style.backgroundColor === "rgb(224, 224, 224)") {
-      refItem.style.backgroundColor = "rgb(148, 21, 21)";
-      refItem.style.color = "rgb(224, 224, 224)";
-    } else if (refItem.style.backgroundColor === "rgb(148, 21, 21)") {
-      refItem.style.backgroundColor = "rgb(41, 159, 41)";
-    } else {
-      refItem.style.backgroundColor = "rgb(224, 224, 224)";
-      refItem.style.color = "rgb(85, 85, 85)";
-    }
-  };
-
   return (
     <div className="game-board">
       <h3>Game Board</h3>
@@ -200,11 +187,7 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
             <h5>Suspects</h5>
             <div className="reference-list">
               {SUSPECTS.map((suspect) => (
-                <span
-                  key={suspect}
-                  className="reference-item"
-                  onClick={changeRefItemColor}
-                  style={{ backgroundColor: "rgb(224, 224, 224)" }}>
+                <span key={suspect} className="reference-item">
                   {suspect}
                 </span>
               ))}
@@ -214,11 +197,7 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
             <h5>Weapons</h5>
             <div className="reference-list">
               {WEAPONS.map((weapon) => (
-                <span
-                  key={weapon}
-                  className="reference-item"
-                  onClick={changeRefItemColor}
-                  style={{ backgroundColor: "rgb(224, 224, 224)" }}>
+                <span key={weapon} className="reference-item">
                   {weapon}
                 </span>
               ))}
@@ -228,11 +207,7 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
             <h5>Rooms</h5>
             <div className="reference-list">
               {ROOMS.map((room) => (
-                <span
-                  key={room}
-                  className="reference-item"
-                  onClick={changeRefItemColor}
-                  style={{ backgroundColor: "rgb(224, 224, 224)" }}>
+                <span key={room} className="reference-item">
                   {room}
                 </span>
               ))}
