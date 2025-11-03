@@ -607,11 +607,9 @@
 }
 
 .reference-item {
-  background: #e0e0e0;
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.8rem;
-  color: #555;
 }
 
 /* Controls */
