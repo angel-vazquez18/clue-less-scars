@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import TestBoard from "./BoardGrid";
+import BoardGrid from "./BoardGrid";
 
 const ROOMS = [
   "Kitchen",

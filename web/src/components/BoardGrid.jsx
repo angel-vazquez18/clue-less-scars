@@ -61,7 +61,7 @@ const getClassName = (cell) => {
 const BoardGrid = () => {
   return (
     <div>
-      <strong>Test Board!</strong>
+      <strong>Clue Game Board</strong>
       <div className="board-grid">
         {board.map((row, rowIndex) => (
           <div className="board-rows" key={rowIndex}>
