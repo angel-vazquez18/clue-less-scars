@@ -7,6 +7,15 @@ const PORT = process.env.PORT || 8080;
 const HTTP_PORT = PORT + 1; // fallback HTTP port (or change as desired)
 const PROTOCOL_VERSION = '1.0';
 
+
+const TurnPhase = {
+  START: 'Start',
+  MOVE_OR_SUGGEST: 'MoveOrSuggest',
+  DISPROVAL: 'Disproval',
+  ACCUSATION_OPTION: 'AccusationOption',
+  END: 'End'
+};
+
 const app = express();
 app.use(bodyParser.json());
 
@@ -81,11 +90,14 @@ function createGame() {
 	games[gameId] = {
 		gameId,
 		players: {},
-		board: {},
+		board: buildDefaultBoard(),
 		turnOrder: [],
 		turnIndex: 0,
 		started: false,
 		solution: null,
+		turnPhase: TurnPhase.START,
+		currentSuggestion: null,
+		waitingForDisprove: null
 	};
 	return games[gameId];
 }
@@ -144,6 +156,8 @@ async function handleMessage(ws, env) {
 			return processChat(game, player, payload, requestId);
 		case 'PING':
 			return processPing(ws, gameId, payload, requestId);
+		case 'END_TURN':
+  			return processEndTurn(game, player, requestId);
 		default:
 			console.warn(`[${gameId}] Unknown message type from player ${player?.name || 'unknown'}: ${type}`);
 			sendWs(ws, makeEnv('ERROR', gameId, { 
@@ -151,13 +165,28 @@ async function handleMessage(ws, env) {
 				message: `Unknown message type: ${type}` 
 			}, requestId));
 	}
+	if (game && player) {
+		game.lastAction = {
+			playerId: player.id,
+			playerName: player.name,
+			type,
+			payload,
+			ts: new Date().toISOString(),
+		};
+		console.log(`[ACTION] ${player.name} performed ${type}`);
+		game.lastActivePlayer = player.id;
+	}
 }
 
 async function processJoinGame(ws, game, payload, requestId) {
 	const { name } = payload;
 	if (!name || typeof name !== 'string' || name.length < 1 || name.length > 32) {
 		sendWs(ws, makeEnv('ERROR',  game.gameId, { code: 'INVALID_NAME', message: 'Name must be 1-32 characters' }, requestId));
-		return;
+		return; 
+	}
+	if (game.started) {
+  		const currentPlayerId = getCurrentPlayerId(game);
+  		sendWs(ws, makeEnv('TURN_START', game.gameId, { playerId: currentPlayerId }));
 	}
 
 	const player = addPlayer(game, name, ws);
@@ -197,12 +226,13 @@ function processSelectCharacter(game, player, payload, requestId) {
 	broadcastGame( game.gameId, 'CHARACTER_SELECTED', { playerId: player.id, characterId });
 }
 
-function processStartGame(game, player, payload, requestId) {
+function processStartGame(game, player, payload, requestId) {	
 	// Start game only if game isn't started already
 	if (game.started) {
     	if (player && player.ws) {
 			sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'ALREADY_STARTED', message: 'Game already started' }, requestId));
 		}
+		return;
 	}
 
 	// ensure more than 1 player
@@ -234,97 +264,334 @@ function processStartGame(game, player, payload, requestId) {
 	}
 	// turn start
 	const currentPlayerId = game.turnOrder[game.turnIndex];
-	broadcastGame( game.gameId, 'TURN_START', { playerId: currentPlayerId });
+	beginTurn(game, currentPlayerId);
+	// Log the turn order and starting player
+	console.log(`[TURN_ORDER] ${game.turnOrder.map(id => game.players[id].name).join(' -> ')}`);
+	console.log(`[TURN] Starting with ${game.players[currentPlayerId].name}`);
+}
+
+function buildDefaultBoard() {
+	// Room IDs (3x3 grid)
+	// Row 1: STUDY, HALL, LOUNGE
+	// Row 2: LIBRARY, BILLIARD_ROOM, DINING_ROOM
+	// Row 3: CONSERVATORY, BALLROOM, KITCHEN
+	//
+	// Hallways (edges) are single-occupancy connectors between adjacent rooms.
+	// Horizontal hallways:
+	//   H_STUDY_HALL, H_HALL_LOUNGE,
+	//   H_LIBRARY_BILLIARD, H_BILLIARD_DINING,
+	//   H_CONSERVATORY_BALLROOM, H_BALLROOM_KITCHEN
+	// Vertical hallways:
+	//   H_STUDY_LIBRARY, H_HALL_BILLIARD, H_LOUNGE_DINING,
+	//   H_LIBRARY_CONSERVATORY, H_BILLIARD_BALLROOM, H_DINING_KITCHEN
+	//
+	// Secret passages (corners):
+	//   STUDY <-> KITCHEN
+	//   LOUNGE <-> CONSERVATORY
+	const hallways = {
+		// horizontals (row 1)
+		H_STUDY_HALL: { id: 'H_STUDY_HALL', capacity: 1, occupiedBy: null },
+		H_HALL_LOUNGE: { id: 'H_HALL_LOUNGE', capacity: 1, occupiedBy: null },
+		// horizontals (row 2)
+		H_LIBRARY_BILLIARD: { id: 'H_LIBRARY_BILLIARD', capacity: 1, occupiedBy: null },
+		H_BILLIARD_DINING: { id: 'H_BILLIARD_DINING', capacity: 1, occupiedBy: null },
+		// horizontals (row 3)
+		H_CONSERVATORY_BALLROOM: { id: 'H_CONSERVATORY_BALLROOM', capacity: 1, occupiedBy: null },
+		H_BALLROOM_KITCHEN: { id: 'H_BALLROOM_KITCHEN', capacity: 1, occupiedBy: null },
+
+		// verticals (col 1)
+		H_STUDY_LIBRARY: { id: 'H_STUDY_LIBRARY', capacity: 1, occupiedBy: null },
+		H_LIBRARY_CONSERVATORY: { id: 'H_LIBRARY_CONSERVATORY', capacity: 1, occupiedBy: null },
+		// verticals (col 2)
+		H_HALL_BILLIARD: { id: 'H_HALL_BILLIARD', capacity: 1, occupiedBy: null },
+		H_BILLIARD_BALLROOM: { id: 'H_BILLIARD_BALLROOM', capacity: 1, occupiedBy: null },
+		// verticals (col 3)
+		H_LOUNGE_DINING: { id: 'H_LOUNGE_DINING', capacity: 1, occupiedBy: null },
+		H_DINING_KITCHEN: { id: 'H_DINING_KITCHEN', capacity: 1, occupiedBy: null },
+	};
+
+	const rooms = {
+		// Row 1
+		STUDY: {
+			id: 'STUDY',
+			adj: ['H_STUDY_HALL', 'H_STUDY_LIBRARY'],
+			secret: 'KITCHEN',
+		},
+		HALL: {
+			id: 'HALL',
+			adj: ['H_STUDY_HALL', 'H_HALL_LOUNGE', 'H_HALL_BILLIARD'],
+			secret: null,
+		},
+		LOUNGE: {
+			id: 'LOUNGE',
+			adj: ['H_HALL_LOUNGE', 'H_LOUNGE_DINING'],
+			secret: 'CONSERVATORY',
+		},
+
+		// Row 2
+		LIBRARY: {
+			id: 'LIBRARY',
+			adj: ['H_STUDY_LIBRARY', 'H_LIBRARY_BILLIARD', 'H_LIBRARY_CONSERVATORY'],
+			secret: null,
+		},
+		BILLIARD_ROOM: {
+			id: 'BILLIARD_ROOM',
+			adj: ['H_LIBRARY_BILLIARD', 'H_BILLIARD_DINING', 'H_HALL_BILLIARD', 'H_BILLIARD_BALLROOM'],
+			secret: null,
+		},
+		DINING_ROOM: {
+			id: 'DINING_ROOM',
+			adj: ['H_BILLIARD_DINING', 'H_LOUNGE_DINING', 'H_DINING_KITCHEN'],
+			secret: null,
+		},
+
+		// Row 3
+		CONSERVATORY: {
+			id: 'CONSERVATORY',
+			adj: ['H_LIBRARY_CONSERVATORY', 'H_CONSERVATORY_BALLROOM'],
+			secret: 'LOUNGE',
+		},
+		BALLROOM: {
+			id: 'BALLROOM',
+			adj: ['H_CONSERVATORY_BALLROOM', 'H_BALLROOM_KITCHEN', 'H_BILLIARD_BALLROOM'],
+			secret: null,
+		},
+		KITCHEN: {
+			id: 'KITCHEN',
+			adj: ['H_BALLROOM_KITCHEN', 'H_DINING_KITCHEN'],
+			secret: 'STUDY',
+		},
+	};
+  	return { rooms, hallways };
+}
+
+function getAdjacent(board, from) {
+	if (!from) return [];
+	if (from.zone === 'ROOM') {
+		// from a room → list of hallways or connected rooms
+		const adj = board.rooms[from.id]?.adj || [];
+		return adj.map(id => ({ zone: 'HALLWAY', id }));
+	}
+	if (from.zone === 'HALLWAY') {
+		// from a hallway → which rooms are connected
+		return Object.keys(board.rooms)
+			.filter(r => board.rooms[r].adj.includes(from.id))
+			.map(id => ({ zone: 'ROOM', id }));
+	}
+	return [];
+}
+
+function isBlocked(board, hallwayId) {
+	const h = board.hallways?.[hallwayId];
+	if (!h) return true; // treat unknown hallway as blocked/invalid
+	return Boolean(h.occupiedBy);
 }
 
 function processRequestMove(game, player, payload, requestId) {
-	if (!player) {
-		return sendError(null, 'NOT_JOINED', 'You must JOIN_GAME first', game.gameId, requestId);
+	if (!player || !game.started) return;
+
+	if (!isPlayersTurn(game, player.id)) {
+		return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+			code: 'NOT_YOUR_TURN',
+			message: 'It is not your turn'
+		}, requestId));
 	}
-	if (!game.started) {
-		sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'GAME_NOT_STARTED', message: 'Game has not started' }, requestId));
-		return;
+
+	if (game.movedThisTurn) {
+		return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+      		code: 'ALREADY_MOVED', message: 'You have already moved this turn'
+    	}, requestId));
+  	}
+
+	const { to, useSecretPassage = false } = payload || {};
+	if (!to || !to.zone || !to.id) {
+		return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+			code: 'INVALID_PAYLOAD',
+			message: 'Missing move target'
+		}, requestId));
 	}
-	const { to, targetId, useSecretPassage } = payload || {};
-	if (!to || !['HALLWAY', 'ROOM'].includes(to)) {
-		sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'INVALID_MOVE', message: 'to must be HALLWAY or ROOM' }, requestId));
-		return;
+
+	// if not set yet, initialize players in the "LOUNGE" (or any default room)
+	if (!player.position) {
+		player.position = { zone: 'ROOM', id: 'LOUNGE' };
 	}
-	const from = player.position || null;
-	player.position = { zone: to, id: targetId || null, secret: !!useSecretPassage };
-	broadcastGame( game.gameId, 'PLAYER_MOVED', { playerId: player.id, from, to: player.position });
+	const from = player.position;
+
+	const adj = getAdjacent(game.board, from);
+	let canMove = adj.some(a => a.zone === to.zone && a.id === to.id);
+	 // Enforce shape of move
+	if (from.zone === 'ROOM' && to.zone === 'ROOM') {
+	const passage = game.board.rooms[from.id]?.secret;
+	if (passage !== to.id) {
+		return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+			code: 'NO_PASSAGE', message: 'Rooms not connected by secret passage'
+		}, requestId));
+	}
+	}
+	if (from.zone === 'HALLWAY' && to.zone === 'HALLWAY') {
+	return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+		code: 'INVALID_MOVE', message: 'Cannot move hallway to hallway'
+	}, requestId));
+	}
+	if (!canMove && useSecretPassage) {
+		const passage = game.board.rooms[from.id]?.secret;
+		if (passage === to.id) canMove = true;
+	}
+
+	if (!canMove) {
+		return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+			code: 'INVALID_MOVE',
+			message: `Cannot move from ${from.id} to ${to.id}`
+		}, requestId));
+	}
+
+	if (to.zone === 'HALLWAY' && isBlocked(game.board, to.id)) {
+		return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+			code: 'BLOCKED',
+			message: 'That hallway is currently occupied'
+		}, requestId));
+	}
+
+	// Clear old hallway occupancy
+	if (from.zone === 'HALLWAY') game.board.hallways[from.id].occupiedBy = null;
+	// Set new hallway occupancy
+	if (to.zone === 'HALLWAY') game.board.hallways[to.id].occupiedBy = player.id;
+
+	player.position = to;
+
+	broadcastGame(game.gameId, 'PLAYER_MOVED', {
+		playerId: player.id,
+		from,
+		to
+	});
+
+	// After moving, player may still Suggest or End Turn
+	game.turnPhase = TurnPhase.MOVE_OR_SUGGEST;
+	//will add limited movement later
+	//game.movedThisTurn = true;
+	// Recompute legal actions for the active player (optional: re-emit TURN_START or a lighter UPDATE_LEGAL)
+	const active = getCurrentPlayerId(game);
+	sendToPlayer(game, active, 'TURN_START', { playerId: active, legal: computeLegalActions(game, active) });
 }
 
 function processMakeSuggestion(game, player, payload, requestId) {
-	if (!player) {
-		return sendError(null, 'NOT_JOINED', 'You must JOIN_GAME first', game.gameId, requestId);
-	}
-	if (!game.started) {
-		sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'GAME_NOT_STARTED', message: 'Game has not started' }, requestId));
-		return;
+	if (!isPlayersTurn(game, player.id)) return;
+	if (game.turnPhase !== TurnPhase.MOVE_OR_SUGGEST) {
+    	return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+      		code: 'ILLEGAL_PHASE', message: 'You can only suggest during MoveOrSuggest'
+		}, requestId));
 	}
 	const { suspectId, weaponId } = payload || {};
 	if (!suspectId || !weaponId) {
-		sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'INVALID_SUGGESTION', message: 'must include suspectId and weaponId' }, requestId));
-		return;
+	   	return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+	    	code: 'INVALID_SUGGESTION', message: 'Must include suspectId and weaponId'
+   		}, requestId));
 	}
-	// build order starting from next player
+	if (player.position?.zone !== 'ROOM') {
+    return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+      		code: 'NOT_IN_ROOM', message: 'You must be in a room to make a suggestion'
+    	}, requestId));
+  	}
+	const roomId = player.position.id;
+
+	// Move suspect to that room
+	const suspect = Object.values(game.players).find(p => p.characterId === suspectId);
+	if (suspect) {
+		suspect.position = { zone: 'ROOM', id: roomId };
+		broadcastGame(game.gameId, 'PLAYER_MOVED', { playerId: suspect.id, to: suspect.position });
+	}
+	else {
+		// Optionally emit a neutral event so UIs can update tokens/NPCs.
+		broadcastGame(game.gameId, 'SUSPECT_SUMMONED', { suspectId, roomId });
+	}
+
+	game.currentSuggestion = { by: player.id, suspectId, weaponId, roomId };
 	const order = computeDisproveOrder(game, player.id);
-	// broadcast suggestion
-	broadcastGame( game.gameId, 'SUGGESTION_MADE', { by: player.id, suspectId, weaponId, roomId: (player.position && player.position.zone === 'ROOM') ? player.position.id : null });
-	// send PROMPT_DISPROVE to the next player in order with ability to respond flow
-	const nextPlayerId = order.length > 0 ? order[0] : null;
-	const prompt = {
-	suggestion: { suspectId, weaponId, roomId: (player.position && player.position.zone === 'ROOM') ? player.position.id : null },
-	order,
-	nextPlayerId
-	};
-	// Send PROMPT_DISPROVE unicast to the original suggester
-	// also send PROMPT_DISPROVE to the next player who needs to respond
-	sendToPlayer(game, player.id, 'PROMPT_DISPROVE', prompt);
-	// Also broadcast the prompt to all? Spec says PROMPT_DISPROVE is server→client unicast messages, so will only send to relevant clients:
-	if (nextPlayerId) {
-		sendToPlayer(game, nextPlayerId, 'PROMPT_DISPROVE', prompt);
+	const nextPlayerId = order[0];
+
+	broadcastGame(game.gameId, 'SUGGESTION_MADE', { by: player.id, suspectId, weaponId, roomId });
+	if (order.length === 0) {
+		// No one to ask → straight to accusation option
+		game.turnPhase = TurnPhase.ACCUSATION_OPTION;
+		const active = getCurrentPlayerId(game);
+		return sendToPlayer(game, active, 'TURN_START', { playerId: active, legal: computeLegalActions(game, active) });
 	}
+	game.waitingForDisprove = nextPlayerId;
+	game.turnPhase = TurnPhase.DISPROVAL;
+	sendToPlayer(game, nextPlayerId, 'PROMPT_DISPROVE', { suggestion: game.currentSuggestion });
+
 }
 
 function processRespondDisprove(game, player, payload, requestId) {
-	if (!player) {
-		return sendError(null, 'NOT_JOINED', 'You must JOIN_GAME first', game.gameId, requestId);
-	}
-	// payload.cardId may be undefined/null to indicate can't disprove
 	const { cardId } = payload || {};
-	// If cardId present, ensure player has the card ( use empty hands currently so allow any card for demo)
-	// For real implementation must check player's hand
-	const disproverId = cardId ? player.id : null;
-	broadcastGame( game.gameId, 'DISPROVE_RESULT', { disproverId });
-	// In a real flow you would send specific info back to suggester if cardId present privately (not broadcast)
-	if (cardId) {
-	// notify suggester privately of which card disproved (in real game you reveal only to suggester)
-	// find suggester by scanning last suggestion ( don't store it in this demo). For now, simulate by sending to all that may be fine.
-	// I'll just send INFO to suggester if found in order. Skipping complex flow here.
+	if (game.waitingForDisprove !== player.id) {
+		return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+			code: 'NOT_YOUR_DISPROVAL', message: 'It is not your turn to disprove'
+		}, requestId));
+	}
+
+	const suggester = game.players[game.currentSuggestion.by];
+	const matches = [game.currentSuggestion.suspectId, game.currentSuggestion.weaponId, game.currentSuggestion.roomId];
+ 	const hasMatch = player.hand.some(c => matches.includes(c));
+	const cardMatchesSuggestion = matches.includes(cardId);
+	if (cardId && hasMatch && cardMatchesSuggestion && player.hand.includes(cardId)) {
+		sendToPlayer(game, suggester.id, 'REVEAL_TO_YOU', { from: player.id, card: cardId });
+		broadcastGame(game.gameId, 'DISPROVED', { by: player.id, cardHidden: true });
+		game.turnPhase = TurnPhase.ACCUSATION_OPTION;
+		game.waitingForDisprove = null;
+		// let active player know options now
+		const active = getCurrentPlayerId(game);
+		sendToPlayer(game, active, 'TURN_START', { playerId: active, legal: computeLegalActions(game, active) });
+	} else {
+		// If a cardId was provided but is illegal, tell them why (optional quality-of-life)
+		if (cardId && (!player.hand.includes(cardId) || !cardMatchesSuggestion)) {
+	    	return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+				code: 'INVALID_DISPROVAL_CARD', message: 'You must reveal a card that matches the suggestion'
+      		}, requestId));
+    	}
+		// advance to next player in chain
+		const order = computeDisproveOrder(game, game.currentSuggestion.by);
+		if (order.length === 0) {
+			broadcastGame(game.gameId, 'NO_DISPROOF', { suggestion: game.currentSuggestion });
+			game.turnPhase = TurnPhase.ACCUSATION_OPTION;
+			game.waitingForDisprove = null;
+			const active = getCurrentPlayerId(game);
+			return sendToPlayer(game, active, 'TURN_START', { playerId: active, legal: computeLegalActions(game, active) });
+    	}
+		const currentIdx = order.indexOf(player.id);
+		const next = order[(currentIdx + 1) % order.length];
+		if (next && next !== game.currentSuggestion.by) {
+			game.waitingForDisprove = next;
+			sendToPlayer(game, next, 'PROMPT_DISPROVE', { suggestion: game.currentSuggestion });
+		} else {
+			broadcastGame(game.gameId, 'NO_DISPROOF', { suggestion: game.currentSuggestion });
+			game.turnPhase = TurnPhase.ACCUSATION_OPTION;
+			game.waitingForDisprove = null;
+			const active = getCurrentPlayerId(game);
+			sendToPlayer(game, active, 'TURN_START', { playerId: active, legal: computeLegalActions(game, active) });
+		}
 	}
 }
 
 function processMakeAccusation(game, player, payload, requestId) {
-	if (!player) {
-		return sendError(null, 'NOT_JOINED', 'You must JOIN_GAME first', game.gameId, requestId);
-	}
+	if (!isPlayersTurn(game, player.id)) return;
+	if (game.turnPhase !== TurnPhase.ACCUSATION_OPTION) {
+		return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+			code: 'ILLEGAL_PHASE', message: 'You may accuse only after the suggestion/disproval step'
+		}, requestId));
+  	}
 	const { suspectId, weaponId, roomId } = payload || {};
-	if (!suspectId || !weaponId || !roomId) {
-		sendWs(player.ws,  makeEnv('ERROR', game.gameId, { code: 'INVALID_ACCUSATION', message: 'must include suspectId, weaponId, roomId' }, requestId));
-		return;
-	}
-	// Check against solution
-	const correct = (game.solution && game.solution.suspectId === suspectId && game.solution.weaponId === weaponId && game.solution.roomId === roomId);
-	broadcastGame( game.gameId, 'ACCUSATION_RESOLVED', { by: player.id, correct });
+	const correct =
+		game.solution.suspectId === suspectId &&
+		game.solution.weaponId === weaponId &&
+		game.solution.roomId === roomId;
+
 	if (correct) {
-		broadcastGame( game.gameId, 'GAME_OVER', { winnerId: player.id, solution: game.solution });
+		broadcastGame(game.gameId, 'GAME_WON', { winnerId: player.id });
 		game.started = false;
 	} else {
-		// in Clue, incorrect accusation often eliminates player; we'll simply announce
-		// in a fuller implementation mark player as eliminated
-		sendWs(player.ws,  makeEnv('INFO', game.gameId, { message: 'Your accusation was incorrect — you are out (demo behavior)' }, requestId));
+		player.eliminated = true;
+		broadcastGame(game.gameId, 'PLAYER_ELIMINATED', { playerId: player.id });
 	}
 }
 
@@ -355,6 +622,22 @@ function processPing(ws, gameId, payload, requestId) {
 	const { seq } = payload || {};
 	sendWs(ws,  makeEnv('PING', gameId, { seq }, requestId));
 }
+
+function processEndTurn(game, player, requestId) {
+	if (!isPlayersTurn(game, player.id)) {
+		sendWs(player.ws, makeEnv('ERROR', game.gameId, { code: 'NOT_YOUR_TURN', message: 'Not your turn' }, requestId));
+		return;
+	}
+	// Check legality by phase
+  	const legal = computeLegalActions(game, player.id);
+  	if (!legal.includes('END_TURN')) {
+    	return sendWs(player.ws, makeEnv('ERROR', game.gameId, {
+      		code: 'ILLEGAL_PHASE', message: 'You cannot end your turn right now'
+    	}, requestId));
+  	}
+  	advanceTurn(game);
+}
+
 	
 // Helper senders
 
@@ -382,6 +665,101 @@ function computeDisproveOrder(game, fromPlayerId) {
 	return order;
 }
 
+// ---- TURN SYSTEM HELPERS ----
+function getCurrentPlayerId(game) {
+	return game.turnOrder[game.turnIndex];
+}
+
+function isPlayersTurn(game, playerId) {
+	return getCurrentPlayerId(game) === playerId;
+}
+
+function computeLegalActions(game, playerId) {
+	const legal = [];
+	const phase = game.turnPhase;
+	const player = game.players[playerId];
+	if (!player || player.eliminated) return legal;
+
+	switch (phase) {
+		case TurnPhase.START:
+		case TurnPhase.MOVE_OR_SUGGEST: {
+		// Movement always allowed (server will validate adjacency/capacity)
+		if (!game.movedThisTurn) legal.push('REQUEST_MOVE');
+
+		// You can suggest only if you are in a room
+		if (player.position?.zone === 'ROOM') {
+			legal.push('MAKE_SUGGESTION');
+		}
+
+		// End turn is allowed during MoveOrSuggest if you want to pass
+		legal.push('END_TURN');
+		break;
+		}
+
+		case TurnPhase.DISPROVAL: {
+		// Only the waiting player can respond
+		if (game.waitingForDisprove === playerId) {
+			legal.push('RESPOND_DISPROVE');
+		}
+		break;
+		}
+
+		case TurnPhase.ACCUSATION_OPTION: {
+		// After suggestion/disproval chain, active player may accuse or end
+		legal.push('MAKE_ACCUSATION');
+		legal.push('END_TURN');
+		break;
+		}
+
+		case TurnPhase.END: {
+		// Safety: only END_TURN makes sense here
+		legal.push('END_TURN');
+		break;
+		}
+	}
+	return legal;
+}
+
+function beginTurn(game, playerId) {
+	game.turnPhase = TurnPhase.START;
+
+	// Move immediately into the interaction phase players actually see
+	// (kept as two steps to make future “on start” effects easy)
+	game.turnPhase = TurnPhase.MOVE_OR_SUGGEST;
+	game.movedThisTurn = false;
+	const legal = computeLegalActions(game, playerId);
+	console.log(`[TURN] It is now ${game.players[playerId].name}'s turn (phase=${game.turnPhase})`);
+	broadcastGame(game.gameId, 'TURN_START', { playerId, legal });
+}
+
+function advanceTurn(game) {
+	if (!game?.started) return;
+	if (!game.turnOrder || game.turnOrder.length === 0) return;
+
+	// Clear any leftover chain state from the previous turn
+	game.currentSuggestion = null;
+	game.waitingForDisprove = null;
+
+	// Rotate to next non-eliminated player (bounded loop)
+	const n = game.turnOrder.length;
+	let hops = 0;
+	do {
+		game.turnIndex = (game.turnIndex + 1) % n;
+		hops++;
+		const pid = game.turnOrder[game.turnIndex];
+		const p = game.players[pid];
+		if (p && !p.eliminated) {
+		beginTurn(game, pid);
+		return;
+		}
+	} while (hops <= n);
+
+	// If we got here, everyone is eliminated or missing — end the game
+	broadcastGame(game.gameId, 'INFO', { message: 'No active players remain — game over.' });
+	game.started = false;
+}
+
+
 //WebSocket Server Setup
 
 const wss = new WebSocket.Server({ port: PORT }, () => {
@@ -406,6 +784,10 @@ wss.on('connection', (ws, req) => {
 		for (const g of Object.values(games)) {
 			for (const pId in g.players) {
 				const p = g.players[pId];
+				if (g.started && g.turnOrder[g.turnIndex] === pId) {
+					console.log(`[TURN] ${p.name} disconnected during their turn — skipping to next player`);
+					advanceTurn(g);
+				}
 				if (p.ws === ws) {
 					p.ws = null;
 					console.log(`[${g.gameId}] Player disconnected: ${p.name} (${p.id})`);
