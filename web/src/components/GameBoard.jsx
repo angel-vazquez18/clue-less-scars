@@ -31,6 +31,15 @@ const WEAPONS = [
   "Wrench",
 ];
 
+const startingPlaces = {
+  scarlet: "H2",
+  plum: "V1",
+  mustard: "V3",
+  peacock: "V4",
+  green: "H5",
+  white: "H6",
+};
+
 const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
   if (!gameState) {
     return (
@@ -42,6 +51,15 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
       </div>
     );
   }
+
+  const [positions, setPositions] = useState(startingPlaces);
+
+  const movePiece = (playerId, newPosition) => {
+    setPosition((prevPosition) => ({
+      ...prevPosition,
+      [playerId]: newPosition,
+    }));
+  };
 
   const renderPlayerPositions = () => {
     if (!gameState.players || gameState.players.length === 0) {
@@ -92,33 +110,6 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
             <strong>Turn Order:</strong> {gameState.turn?.order?.length || 0}{" "}
             players
           </div>
-        </div>
-      </div>
-    );
-  };
-
-  const renderBoardVisualization = () => {
-    return (
-      <div className="board-visualization">
-        <h4>Clue Board</h4>
-        <div className="board-grid">
-          {ROOMS.map((room, index) => (
-            <div key={room} className="room-cell">
-              <div className="room-name">{room}</div>
-              <div className="room-players">
-                {gameState.players
-                  .filter(
-                    (p) =>
-                      p.position?.zone === "ROOM" && p.position?.id === room
-                  )
-                  .map((p) => (
-                    <div key={p.id} className="player-in-room">
-                      {p.name}
-                    </div>
-                  ))}
-              </div>
-            </div>
-          ))}
         </div>
       </div>
     );
@@ -186,9 +177,12 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
         <div className="game-view">
           {renderGameInfo()}
           {renderCurrentPlayerInfo()}
-          <BoardGrid gameState={gameState} />
+          <div
+            className="grid-container"
+            style={{ position: "relative", width: "fit-content" }}>
+            <BoardGrid gameState={gameState} startingPositions={positions} />
+          </div>
           {renderPlayerPositions()}
-          {renderBoardVisualization()}
         </div>
       )}
 

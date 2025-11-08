@@ -1,7 +1,7 @@
 import React from "react";
 
 //grid layout for the clue game board. Rooms have full names, hallways are named based on direction and number: horizontal or vertical
-const board = [
+export const board = [
   ["Study", "H1", "Hall", "H2", "Lounge"],
   ["V1", " ", "V2", " ", "V3"],
   ["Library", "H3", "Billiard Room", "H4", "Dining Room"],
@@ -34,15 +34,6 @@ const boardObj = {
   Kitchen: ["H6", "V6", "Study"],
 };
 
-const startingPlaces = {
-  scarlet: "H2",
-  plum: "V1",
-  mustard: "V3",
-  peacock: "V4",
-  green: "H5",
-  white: "H6",
-};
-
 //to determine className for CSS
 const getClassName = (cell) => {
   if (cell === " ") {
@@ -58,27 +49,58 @@ const getClassName = (cell) => {
   }
 };
 
-const BoardGrid = () => {
+const cellPositions = {};
+board.forEach((row, r) => {
+  row.forEach((cell, c) => {
+    if (cell.trim()) cellPositions[cell] = { row: r, col: c };
+  });
+});
+
+const BoardGrid = ({ startingPositions }) => {
   return (
     <div>
       <strong>Clue Game Board</strong>
-      <div className="board-grid">
-        {board.map((row, rowIndex) => (
-          <div className="board-rows" key={rowIndex}>
-            {row.map(
-              (cell, cellIndex) => (
-                console.log("row: :", row, "cell: ", cell),
-                (
-                  <div
-                    key={`${rowIndex}-${cellIndex}`}
-                    className={getClassName(cell)}>
-                    {cell}
-                  </div>
-                )
-              )
-            )}
-          </div>
-        ))}
+
+      <div className="grid-container">
+        <div className="board-grid">
+          {board.map((row, rowIndex) =>
+            row.map((cell, cellIndex) => (
+              <div
+                key={`${rowIndex}-${cellIndex}`}
+                className={getClassName(cell)}>
+                {cell}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="game-pieces-grid">
+          {Object.entries(startingPositions).map(([id, start]) => {
+            const pos = cellPositions[start];
+            if (!pos) return null;
+            console.log(
+              "rendering player: ",
+              id,
+              pos,
+              "From playerGamePieces: ",
+              `Player ${id} is in ${start}`,
+              "cellPositions from playergamepieces: ",
+              cellPositions,
+              pos.row + 1,
+              pos.col + 1
+            );
+            return (
+              <div
+                key={id}
+                className={`player-piece ${id}`}
+                style={{
+                  gridRow: pos.row + 1,
+                  gridColumn: pos.col + 1,
+                }}>
+                {id[0]}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
