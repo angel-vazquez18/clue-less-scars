@@ -59,6 +59,7 @@ const BoardGrid = ({ startingPositions, gameState }) => {
                 const pos = cellPositions[value];
                 if (!pos) return null;
                 const piece = convertNameForCss(key);
+                player.position = value;
                 console.log(
                   "gameState: ",
                   gameState,
