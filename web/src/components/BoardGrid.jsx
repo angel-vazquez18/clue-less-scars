@@ -9,31 +9,6 @@ export const board = [
   ["Conservatory", "H5", "Ballroom", "H6", "Kitchen"],
 ];
 
-//board ajacency list - to help determine possible move directions, if needed
-const boardObj = {
-  Study: ["H1", "V1", "Kitchen"],
-  H1: ["Study", "Hall"],
-  Hall: ["H1", "H2", "V2"],
-  H2: ["Hall", "Lounge"],
-  Lounge: ["H2", "V3", "Conservatory"],
-  V1: ["Study", "Library"],
-  V2: ["Hall", "Billiard Room"],
-  V3: ["Lounge", "Dining Room"],
-  Library: ["V1", "H3", "V4"],
-  H3: ["Library", "Billiard Room"],
-  "Billiard Room": ["H3", "H4", "V2", "V5"],
-  H4: ["Billiard Room", "Dining Room"],
-  "Dining Room": ["V3", "V6", "H4"],
-  V4: ["Library", "Conservatory"],
-  V5: ["Billiard Room", "Ballroom"],
-  V6: ["Dining Room", "Kitchen"],
-  Conservatory: ["V4", "H5", "Lounge"],
-  H5: ["Conservatory", "Ballroom"],
-  Ballroom: ["H5", "H6", "V5"],
-  H6: ["Ballroom", "Kitchen"],
-  Kitchen: ["H6", "V6", "Study"],
-};
-
 //to determine className for CSS
 const getClassName = (cell) => {
   if (cell === " ") {
@@ -49,6 +24,10 @@ const getClassName = (cell) => {
   }
 };
 
+const convertNameForCss = (charName) => {
+  return charName.replace(/^[^ ]* /, "").toLowerCase();
+};
+
 const cellPositions = {};
 board.forEach((row, r) => {
   row.forEach((cell, c) => {
@@ -56,7 +35,7 @@ board.forEach((row, r) => {
   });
 });
 
-const BoardGrid = ({ startingPositions }) => {
+const BoardGrid = ({ startingPositions, gameState }) => {
   return (
     <div>
       <strong>Clue Game Board</strong>
@@ -74,31 +53,39 @@ const BoardGrid = ({ startingPositions }) => {
           )}
         </div>
         <div className="game-pieces-grid">
-          {Object.entries(startingPositions).map(([id, start]) => {
-            const pos = cellPositions[start];
-            if (!pos) return null;
-            console.log(
-              "rendering player: ",
-              id,
-              pos,
-              "From playerGamePieces: ",
-              `Player ${id} is in ${start}`,
-              "cellPositions from playergamepieces: ",
-              cellPositions,
-              pos.row + 1,
-              pos.col + 1
-            );
-            return (
-              <div
-                key={id}
-                className={`player-piece ${id}`}
-                style={{
-                  gridRow: pos.row + 1,
-                  gridColumn: pos.col + 1,
-                }}>
-                {id[0]}
-              </div>
-            );
+          {Object.entries(startingPositions).map(([key, value]) => {
+            return gameState.players.map((player) => {
+              if (player.characterId === key) {
+                const pos = cellPositions[value];
+                if (!pos) return null;
+                const piece = convertNameForCss(key);
+                console.log(
+                  "gameState: ",
+                  gameState,
+                  "rendering player: ",
+                  key,
+                  pos,
+                  convertNameForCss(key),
+                  "From playerGamePieces: ",
+                  `Player ${key} is in ${value}`,
+                  "cellPositions from playergamepieces: ",
+                  cellPositions,
+                  pos.row + 1,
+                  pos.col + 1
+                );
+                return (
+                  <div
+                    key={key}
+                    className={`player-piece ${piece}`}
+                    style={{
+                      gridRow: pos.row + 1,
+                      gridColumn: pos.col + 1,
+                    }}>
+                    {key[0]}
+                  </div>
+                );
+              }
+            });
           })}
         </div>
       </div>

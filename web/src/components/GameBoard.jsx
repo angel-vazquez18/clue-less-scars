@@ -32,12 +32,37 @@ const WEAPONS = [
 ];
 
 const startingPlaces = {
-  scarlet: "H2",
-  plum: "V1",
-  mustard: "V3",
-  peacock: "V4",
-  green: "H5",
-  white: "H6",
+  "Miss Scarlet": "H2",
+  "Professor Plum": "V1",
+  "Colonel Mustard": "V3",
+  "Mrs. Peacock": "V4",
+  "Mr. Green": "H5",
+  "Mrs. White": "H6",
+};
+
+//board ajacency list - to help determine possible move directions, if needed
+const boardObj = {
+  Study: ["H1", "V1", "Kitchen"],
+  H1: ["Study", "Hall"],
+  Hall: ["H1", "H2", "V2"],
+  H2: ["Hall", "Lounge"],
+  Lounge: ["H2", "V3", "Conservatory"],
+  V1: ["Study", "Library"],
+  V2: ["Hall", "Billiard Room"],
+  V3: ["Lounge", "Dining Room"],
+  Library: ["V1", "H3", "V4"],
+  H3: ["Library", "Billiard Room"],
+  "Billiard Room": ["H3", "H4", "V2", "V5"],
+  H4: ["Billiard Room", "Dining Room"],
+  "Dining Room": ["V3", "V6", "H4"],
+  V4: ["Library", "Conservatory"],
+  V5: ["Billiard Room", "Ballroom"],
+  V6: ["Dining Room", "Kitchen"],
+  Conservatory: ["V4", "H5", "Lounge"],
+  H5: ["Conservatory", "Ballroom"],
+  Ballroom: ["H5", "H6", "V5"],
+  H6: ["Ballroom", "Kitchen"],
+  Kitchen: ["H6", "V6", "Study"],
 };
 
 const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
