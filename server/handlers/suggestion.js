@@ -40,6 +40,17 @@ function handleMakeSuggestion(ws, env) {
     roomId: (player.position && player.position.zone === 'ROOM') ? player.position.id : null 
   }));
 
+  // Store pending suggestion state for disproval sequence
+  game.pendingSuggestion = {
+    suggesterId: player.id,
+    suspectId,
+    weaponId,
+    roomId: (player.position && player.position.zone === 'ROOM') ? player.position.id : payload.roomId || null,
+    order,
+    index: 0,
+    resolved: false
+  };
+
   // Send PROMPT_DISPROVE to the next player in order
   const nextPlayerId = order.length > 0 ? order[0] : null;
   const prompt = {

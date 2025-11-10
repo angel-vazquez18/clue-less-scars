@@ -28,7 +28,7 @@ function handleJoin(ws, env) {
   console.log(`[${game.gameId}] Player joined: ${player.name} (${player.id})`);
 
   // private state to joining player
-  safe(ws, makeEnv(T.YOUR_HAND, gid, { cards: player.hand }, requestId));
+  safe(ws, makeEnv(T.YOUR_HAND, gid, { cards: player.hand || [] }, requestId));
   safe(ws, makeEnv(T.GAME_STATE, gid, {
     board: game.board,
     players: publicPlayers(game),

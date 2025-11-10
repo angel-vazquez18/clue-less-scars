@@ -1,5 +1,5 @@
 const { makeEnv } = require('../schema/envelope');
-const { broadcast } = require('../utils/send');
+const { broadcast, sendToPlayer } = require('../utils/send');
 const { resolveGameAndPlayer } = require('../state/games');
 const T = require('../schema/types');
 
