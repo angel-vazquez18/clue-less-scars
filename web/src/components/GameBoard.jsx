@@ -77,8 +77,6 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
     );
   }
 
-  const [positions, setPositions] = useState(startingPlaces);
-
   const movePiece = (playerId, newPosition) => {
     setPosition((prevPosition) => ({
       ...prevPosition,
@@ -156,11 +154,9 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
           </div>
           <div>
             <strong>Position:</strong>{" "}
-            {currentPlayer.position
-              ? `${currentPlayer.position.zone} ${
-                  currentPlayer.position.id || ""
-                }`
-              : "Not on board"}
+            {currentPlayer["position"]?.length < 3
+              ? "Hallway"
+              : currentPlayer.position}
           </div>
         </div>
       </div>

@@ -52,41 +52,25 @@ const BoardGrid = ({ startingPositions, gameState }) => {
             ))
           )}
         </div>
+
         <div className="game-pieces-grid">
-          {Object.entries(startingPositions).map(([key, value]) => {
-            return gameState.players.map((player) => {
-              if (player.characterId === key) {
-                const pos = cellPositions[value];
-                if (!pos) return null;
-                const piece = convertNameForCss(key);
-                player.position = value;
-                console.log(
-                  "gameState: ",
-                  gameState,
-                  "rendering player: ",
-                  key,
-                  pos,
-                  convertNameForCss(key),
-                  "From playerGamePieces: ",
-                  `Player ${key} is in ${value}`,
-                  "cellPositions from playergamepieces: ",
-                  cellPositions,
-                  pos.row + 1,
-                  pos.col + 1
-                );
-                return (
-                  <div
-                    key={key}
-                    className={`player-piece ${piece}`}
-                    style={{
-                      gridRow: pos.row + 1,
-                      gridColumn: pos.col + 1,
-                    }}>
-                    {key[0]}
-                  </div>
-                );
-              }
-            });
+          {gameState.players.map((player) => {
+            const value = startingPositions[player.characterId];
+            const pos = cellPositions[value];
+            if (!pos) return null;
+            const piece = convertNameForCss(player.characterId);
+            console.log("player: ", player, "game state: ", gameState);
+            return (
+              <div
+                key={player.characterId}
+                className={`player-piece ${piece}`}
+                style={{
+                  gridRow: pos.row + 1,
+                  gridColumn: pos.col + 1,
+                }}>
+                {player.characterId[0]}
+              </div>
+            );
           })}
         </div>
       </div>
