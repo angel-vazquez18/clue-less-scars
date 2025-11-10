@@ -1,47 +1,13 @@
 import React from "react";
 
 //grid layout for the clue game board. Rooms have full names, hallways are named based on direction and number: horizontal or vertical
-const board = [
+export const board = [
   ["Study", "H1", "Hall", "H2", "Lounge"],
   ["V1", " ", "V2", " ", "V3"],
   ["Library", "H3", "Billiard Room", "H4", "Dining Room"],
   ["V4", " ", "V5", " ", "V6"],
   ["Conservatory", "H5", "Ballroom", "H6", "Kitchen"],
 ];
-
-//board ajacency list - to help determine possible move directions, if needed
-const boardObj = {
-  Study: ["H1", "V1", "Kitchen"],
-  H1: ["Study", "Hall"],
-  Hall: ["H1", "H2", "V2"],
-  H2: ["Hall", "Lounge"],
-  Lounge: ["H2", "V3", "Conservatory"],
-  V1: ["Study", "Library"],
-  V2: ["Hall", "Billiard Room"],
-  V3: ["Lounge", "Dining Room"],
-  Library: ["V1", "H3", "V4"],
-  H3: ["Library", "Billiard Room"],
-  "Billiard Room": ["H3", "H4", "V2", "V5"],
-  H4: ["Billiard Room", "Dining Room"],
-  "Dining Room": ["V3", "V6", "H4"],
-  V4: ["Library", "Conservatory"],
-  V5: ["Billiard Room", "Ballroom"],
-  V6: ["Dining Room", "Kitchen"],
-  Conservatory: ["V4", "H5", "Lounge"],
-  H5: ["Conservatory", "Ballroom"],
-  Ballroom: ["H5", "H6", "V5"],
-  H6: ["Ballroom", "Kitchen"],
-  Kitchen: ["H6", "V6", "Study"],
-};
-
-const startingPlaces = {
-  scarlet: "H2",
-  plum: "V1",
-  mustard: "V3",
-  peacock: "V4",
-  green: "H5",
-  white: "H6",
-};
 
 //to determine className for CSS
 const getClassName = (cell) => {
@@ -58,27 +24,55 @@ const getClassName = (cell) => {
   }
 };
 
-const BoardGrid = () => {
+const convertNameForCss = (charName) => {
+  return charName.replace(/^[^ ]* /, "").toLowerCase();
+};
+
+const cellPositions = {};
+board.forEach((row, r) => {
+  row.forEach((cell, c) => {
+    if (cell.trim()) cellPositions[cell] = { row: r, col: c };
+  });
+});
+
+const BoardGrid = ({ startingPositions, gameState }) => {
   return (
     <div>
-      <strong>Test Board!</strong>
-      <div className="board-grid">
-        {board.map((row, rowIndex) => (
-          <div className="board-rows" key={rowIndex}>
-            {row.map(
-              (cell, cellIndex) => (
-                console.log("row: :", row, "cell: ", cell),
-                (
-                  <div
-                    key={`${rowIndex}-${cellIndex}`}
-                    className={getClassName(cell)}>
-                    {cell}
-                  </div>
-                )
-              )
-            )}
-          </div>
-        ))}
+      <strong>Clue Game Board</strong>
+
+      <div className="grid-container">
+        <div className="board-grid">
+          {board.map((row, rowIndex) =>
+            row.map((cell, cellIndex) => (
+              <div
+                key={`${rowIndex}-${cellIndex}`}
+                className={getClassName(cell)}>
+                {cell}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="game-pieces-grid">
+          {gameState.players.map((player) => {
+            const value = startingPositions[player.characterId];
+            const pos = cellPositions[value];
+            if (!pos) return null;
+            const piece = convertNameForCss(player.characterId);
+            console.log("player: ", player, "game state: ", gameState);
+            return (
+              <div
+                key={player.characterId}
+                className={`player-piece ${piece}`}
+                style={{
+                  gridRow: pos.row + 1,
+                  gridColumn: pos.col + 1,
+                }}>
+                {player.characterId[0]}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

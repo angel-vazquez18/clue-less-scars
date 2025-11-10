@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import TestBoard from "./BoardGrid";
+import BoardGrid from "./BoardGrid";
 
 const ROOMS = [
   "Kitchen",
@@ -31,6 +31,40 @@ const WEAPONS = [
   "Wrench",
 ];
 
+const startingPlaces = {
+  "Miss Scarlet": "H2",
+  "Professor Plum": "V1",
+  "Colonel Mustard": "V3",
+  "Mrs. Peacock": "V4",
+  "Mr. Green": "H5",
+  "Mrs. White": "H6",
+};
+
+//board ajacency list - to help determine possible move directions, if needed
+const boardObj = {
+  Study: ["H1", "V1", "Kitchen"],
+  H1: ["Study", "Hall"],
+  Hall: ["H1", "H2", "V2"],
+  H2: ["Hall", "Lounge"],
+  Lounge: ["H2", "V3", "Conservatory"],
+  V1: ["Study", "Library"],
+  V2: ["Hall", "Billiard Room"],
+  V3: ["Lounge", "Dining Room"],
+  Library: ["V1", "H3", "V4"],
+  H3: ["Library", "Billiard Room"],
+  "Billiard Room": ["H3", "H4", "V2", "V5"],
+  H4: ["Billiard Room", "Dining Room"],
+  "Dining Room": ["V3", "V6", "H4"],
+  V4: ["Library", "Conservatory"],
+  V5: ["Billiard Room", "Ballroom"],
+  V6: ["Dining Room", "Kitchen"],
+  Conservatory: ["V4", "H5", "Lounge"],
+  H5: ["Conservatory", "Ballroom"],
+  Ballroom: ["H5", "H6", "V5"],
+  H6: ["Ballroom", "Kitchen"],
+  Kitchen: ["H6", "V6", "Study"],
+};
+
 const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
   if (!gameState) {
     return (
@@ -42,6 +76,13 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
       </div>
     );
   }
+
+  const movePiece = (playerId, newPosition) => {
+    setPosition((prevPosition) => ({
+      ...prevPosition,
+      [playerId]: newPosition,
+    }));
+  };
 
   const renderPlayerPositions = () => {
     if (!gameState.players || gameState.players.length === 0) {
@@ -97,33 +138,6 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
     );
   };
 
-  const renderBoardVisualization = () => {
-    return (
-      <div className="board-visualization">
-        <h4>Clue Board</h4>
-        <div className="board-grid">
-          {ROOMS.map((room, index) => (
-            <div key={room} className="room-cell">
-              <div className="room-name">{room}</div>
-              <div className="room-players">
-                {gameState.players
-                  .filter(
-                    (p) =>
-                      p.position?.zone === "ROOM" && p.position?.id === room
-                  )
-                  .map((p) => (
-                    <div key={p.id} className="player-in-room">
-                      {p.name}
-                    </div>
-                  ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
   const renderCurrentPlayerInfo = () => {
     if (!currentPlayer) return null;
 
@@ -140,15 +154,26 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
           </div>
           <div>
             <strong>Position:</strong>{" "}
-            {currentPlayer.position
-              ? `${currentPlayer.position.zone} ${
-                  currentPlayer.position.id || ""
-                }`
-              : "Not on board"}
+            {currentPlayer["position"]?.length < 3
+              ? "Hallway"
+              : currentPlayer.position}
           </div>
         </div>
       </div>
     );
+  };
+
+  const changeRefItemColor = (e) => {
+    const refItem = e.target;
+    if (refItem.style.backgroundColor === "rgb(224, 224, 224)") {
+      refItem.style.backgroundColor = "rgb(148, 21, 21)";
+      refItem.style.color = "rgb(224, 224, 224)";
+    } else if (refItem.style.backgroundColor === "rgb(148, 21, 21)") {
+      refItem.style.backgroundColor = "rgb(41, 159, 41)";
+    } else {
+      refItem.style.backgroundColor = "rgb(224, 224, 224)";
+      refItem.style.color = "rgb(85, 85, 85)";
+    }
   };
 
   return (
@@ -173,9 +198,12 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
         <div className="game-view">
           {renderGameInfo()}
           {renderCurrentPlayerInfo()}
-          <BoardGrid gameState={gameState} />
+          <div
+            className="grid-container"
+            style={{ position: "relative", width: "fit-content" }}>
+            <BoardGrid gameState={gameState} startingPositions={positions} />
+          </div>
           {renderPlayerPositions()}
-          {renderBoardVisualization()}
         </div>
       )}
 
@@ -187,7 +215,11 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
             <h5>Suspects</h5>
             <div className="reference-list">
               {SUSPECTS.map((suspect) => (
-                <span key={suspect} className="reference-item">
+                <span
+                  key={suspect}
+                  className="reference-item"
+                  onClick={changeRefItemColor}
+                  style={{ backgroundColor: "rgb(224, 224, 224)" }}>
                   {suspect}
                 </span>
               ))}
@@ -197,7 +229,11 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
             <h5>Weapons</h5>
             <div className="reference-list">
               {WEAPONS.map((weapon) => (
-                <span key={weapon} className="reference-item">
+                <span
+                  key={weapon}
+                  className="reference-item"
+                  onClick={changeRefItemColor}
+                  style={{ backgroundColor: "rgb(224, 224, 224)" }}>
                   {weapon}
                 </span>
               ))}
@@ -207,7 +243,11 @@ const GameBoard = ({ gameState, currentPlayer, gameStarted }) => {
             <h5>Rooms</h5>
             <div className="reference-list">
               {ROOMS.map((room) => (
-                <span key={room} className="reference-item">
+                <span
+                  key={room}
+                  className="reference-item"
+                  onClick={changeRefItemColor}
+                  style={{ backgroundColor: "rgb(224, 224, 224)" }}>
                   {room}
                 </span>
               ))}
