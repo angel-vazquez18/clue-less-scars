@@ -1,5 +1,64 @@
 const { v4: uuidv4 } = require('uuid');
 
+// ---- Minimal dealing & envelope (Clue-Less) ----
+const SUSPECTS = ['mustard','plum','scarlet','peacock','green','white'];
+const WEAPONS  = ['knife','candlestick','revolver','rope','leadpipe','wrench'];
+const ROOMS    = ['kitchen','ballroom','conservatory','dining','billiard','library','lounge','hall','study'];
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function createDeck() {
+  const toCards = (arr, type) => arr.map(id => ({ id: `${type}:${id}`, type, name: id }));
+  return [
+    ...toCards(SUSPECTS, 'suspect'),
+    ...toCards(WEAPONS, 'weapon'),
+    ...toCards(ROOMS, 'room')
+  ];
+}
+
+function makeEnvelopeAndDeal(game) {
+  // pick 1 of each for the solution
+  const suspects = shuffle(SUSPECTS).slice();
+  const weapons  = shuffle(WEAPONS).slice();
+  const rooms    = shuffle(ROOMS).slice();
+  const solution = {
+    suspect: `suspect:${suspects.pop()}`,
+    weapon:  `weapon:${weapons.pop()}`,
+    room:    `room:${rooms.pop()}`
+  };
+
+  // remaining deck
+  const remaining = [
+    ...suspects.map(s => ({ id:`suspect:${s}`, type:'suspect'})),
+    ...weapons.map(w => ({ id:`weapon:${w}`, type:'weapon'})),
+    ...rooms.map(r => ({ id:`room:${r}`, type:'room'})),
+  ];
+  const deck = shuffle(remaining);
+
+  // init hands
+  const pids = Object.keys(game.players);
+  pids.forEach(pid => { game.players[pid].hand = []; });
+
+  // deal round-robin
+  let i = 0;
+  for (const card of deck) {
+    const pid = pids[i % pids.length];
+    game.players[pid].hand.push(card.id);
+    i++;
+  }
+
+  game.solution = solution;
+  game.dealt = true;
+}
+
+
 const games = Object.create(null); // gid -> { gameId, players:{pid:{...}}, turnOrder:[], started:false, board, solution, turnIndex }
 
 function ensureGame(gameId) {
@@ -65,6 +124,8 @@ function resolveGameAndPlayer(ws, gameId) {
 }
 
 function startGame(game) {
+  if (!game.dealt) { makeEnvelopeAndDeal(game); }
+
   if (game.started) return false;
   if (Object.keys(game.players).length < 4) return false;
   
