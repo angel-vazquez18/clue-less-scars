@@ -1,78 +1,207 @@
-import React from "react";
+import React, { useMemo } from "react";
 
-//grid layout for the clue game board. Rooms have full names, hallways are named based on direction and number: horizontal or vertical
-export const board = [
-  ["Study", "H1", "Hall", "H2", "Lounge"],
-  ["V1", " ", "V2", " ", "V3"],
-  ["Library", "H3", "Billiard Room", "H4", "Dining Room"],
-  ["V4", " ", "V5", " ", "V6"],
-  ["Conservatory", "H5", "Ballroom", "H6", "Kitchen"],
-];
+const BOARD_SIZE = 15;
 
-//to determine className for CSS
-const getClassName = (cell) => {
-  if (cell === " ") {
-    return "empty-grid";
-  }
-  if (cell.length < 3 && cell[0] === "H") {
-    return "hall-cell";
-  }
-  if (cell.length < 3 && cell[0] === "V") {
-    return "vertical-hall";
-  } else {
-    return "room-cell";
-  }
+const CHARACTER_COLORS = {
+  "Miss Scarlet": "#dc143c",
+  "Professor Plum": "#811381",
+  "Colonel Mustard": "#ffd700",
+  "Mrs. Peacock": "#0e7cbc",
+  "Mr. Green": "#1ca81c",
+  "Mrs. White": "#f7f7f7",
 };
 
-const convertNameForCss = (charName) => {
-  return charName.replace(/^[^ ]* /, "").toLowerCase();
+const ROOM_COLORS = {
+  Study: "#d1b48c",
+  Hall: "#f3d9a6",
+  Lounge: "#d69ba2",
+  Library: "#a1b8c8",
+  "Billiard Room": "#8ab17d",
+  "Dining Room": "#c9a46c",
+  Conservatory: "#7fb8ad",
+  Ballroom: "#a1a4d6",
+  Kitchen: "#c1d18a",
 };
 
-const cellPositions = {};
-board.forEach((row, r) => {
-  row.forEach((cell, c) => {
-    if (cell.trim()) cellPositions[cell] = { row: r, col: c };
+const createBoardLayout = () => {
+  const layout = Array.from({ length: BOARD_SIZE }, () =>
+    Array.from({ length: BOARD_SIZE }, () => ({
+      type: "void",
+      id: null,
+      label: "",
+      secret: false,
+    }))
+  );
+
+  const fillRegion = (
+    rowStart,
+    colStart,
+    height,
+    width,
+    { id, type, label, secret }
+  ) => {
+    const midRow = rowStart + Math.floor(height / 2);
+    const midCol = colStart + Math.floor(width / 2);
+    for (let r = rowStart; r < rowStart + height; r++) {
+      for (let c = colStart; c < colStart + width; c++) {
+        layout[r][c] = {
+          type,
+          id,
+          label: r === midRow && c === midCol ? label || id : "",
+          secret: !!secret && r === rowStart && c === colStart,
+        };
+      }
+    }
+  };
+
+  const fillWalkway = (rowStart, colStart, height, width, id, label) => {
+    fillRegion(rowStart, colStart, height, width, {
+      id,
+      type: "hallway",
+      label,
+    });
+  };
+
+  // Rooms
+  fillRegion(0, 0, 5, 5, { id: "Study", type: "room", label: "Study", secret: true });
+  fillRegion(0, 6, 5, 3, { id: "Hall", type: "room", label: "Hall" });
+  fillRegion(0, 10, 5, 5, { id: "Lounge", type: "room", label: "Lounge", secret: true });
+  fillRegion(6, 0, 5, 5, { id: "Library", type: "room", label: "Library" });
+  fillRegion(6, 6, 5, 3, { id: "Billiard Room", type: "room", label: "Billiard" });
+  fillRegion(6, 10, 5, 5, { id: "Dining Room", type: "room", label: "Dining" });
+  fillRegion(11, 0, 4, 5, { id: "Conservatory", type: "room", label: "Conservatory", secret: true });
+  fillRegion(11, 6, 4, 3, { id: "Ballroom", type: "room", label: "Ballroom" });
+  fillRegion(11, 10, 4, 5, { id: "Kitchen", type: "room", label: "Kitchen", secret: true });
+
+  // Hallways (H1-H6 horizontal connectors)
+  fillWalkway(0, 5, 5, 1, "H1", "H1");
+  fillWalkway(0, 9, 5, 1, "H2", "H2");
+  fillWalkway(6, 5, 5, 1, "H3", "H3");
+  fillWalkway(6, 9, 5, 1, "H4", "H4");
+  fillWalkway(11, 5, 4, 1, "H5", "H5");
+  fillWalkway(11, 9, 4, 1, "H6", "H6");
+
+  // Hallways (V1-V6 vertical connectors)
+  fillWalkway(5, 0, 1, 5, "V1", "V1");
+  fillWalkway(5, 6, 1, 3, "V2", "V2");
+  fillWalkway(5, 10, 1, 5, "V3", "V3");
+  fillWalkway(10, 0, 1, 5, "V4", "V4");
+  fillWalkway(10, 6, 1, 3, "V5", "V5");
+  fillWalkway(10, 10, 1, 5, "V6", "V6");
+
+  return layout;
+};
+
+const BOARD_LAYOUT = createBoardLayout();
+
+const cellPositions = BOARD_LAYOUT.reduce((acc, row, rowIndex) => {
+  row.forEach((cell, colIndex) => {
+    if (cell && cell.id && !acc[cell.id]) {
+      acc[cell.id] = { row: rowIndex, col: colIndex };
+    }
   });
-});
+  return acc;
+}, {});
+
+const getPlayerCellId = (player, startingPositions) => {
+  if (player.position?.id) return player.position.id;
+  return startingPositions[player.characterId] || null;
+};
 
 const BoardGrid = ({ startingPositions, gameState }) => {
+  const playersByCell = useMemo(() => {
+    const playersWithCharacters = (gameState.players || []).filter(
+      (p) => p.characterId
+    );
+    return playersWithCharacters.reduce((acc, player) => {
+      const cellId = getPlayerCellId(player, startingPositions);
+      if (!cellId || !cellPositions[cellId]) return acc;
+      if (!acc[cellId]) acc[cellId] = [];
+      acc[cellId].push(player);
+      return acc;
+    }, {});
+  }, [gameState.players, startingPositions]);
+
+  const weaponsByCell = useMemo(() => {
+    return Object.entries(gameState.board?.weaponTokens || {}).reduce(
+      (acc, [weaponId, locationId]) => {
+        if (!locationId || !cellPositions[locationId]) return acc;
+        if (!acc[locationId]) acc[locationId] = [];
+        acc[locationId].push(weaponId);
+        return acc;
+      },
+      {}
+    );
+  }, [gameState.board?.weaponTokens]);
+
   return (
-    <div>
-      <strong>Clue Game Board</strong>
+    <div className="board-wrapper">
+      <div
+        className="board-grid"
+        style={{
+          gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(32px, 1fr))`,
+          gridTemplateRows: `repeat(${BOARD_SIZE}, minmax(32px, 1fr))`,
+        }}
+      >
+        {BOARD_LAYOUT.map((row, rowIndex) =>
+          row.map((cell, colIndex) => {
+            if (!cell || cell.type === "void") {
+              return (
+                <div
+                  key={`void-${rowIndex}-${colIndex}`}
+                  className="board-cell void"
+                />
+              );
+            }
 
-      <div className="grid-container">
-        <div className="board-grid">
-          {board.map((row, rowIndex) =>
-            row.map((cell, cellIndex) => (
-              <div
-                key={`${rowIndex}-${cellIndex}`}
-                className={getClassName(cell)}>
-                {cell}
-              </div>
-            ))
-          )}
-        </div>
+            const playersHere = playersByCell[cell.id] || [];
+            const weaponsHere = weaponsByCell[cell.id] || [];
+            const roomColor =
+              cell.type === "room" ? ROOM_COLORS[cell.id] || "#d7ccc8" : null;
 
-        <div className="game-pieces-grid">
-          {gameState.players.map((player) => {
-            const value = startingPositions[player.characterId];
-            const pos = cellPositions[value];
-            if (!pos) return null;
-            const piece = convertNameForCss(player.characterId);
-            console.log("player: ", player, "game state: ", gameState);
             return (
               <div
-                key={player.characterId}
-                className={`player-piece ${piece}`}
+                key={`${cell.id}-${rowIndex}-${colIndex}`}
+                className={`board-cell ${cell.type}`}
+                data-cell-id={cell.id}
                 style={{
-                  gridRow: pos.row + 1,
-                  gridColumn: pos.col + 1,
-                }}>
-                {player.characterId[0]}
+                  backgroundColor:
+                    cell.type === "room"
+                      ? roomColor
+                      : cell.type === "hallway"
+                      ? "rgba(214, 188, 150, 0.5)"
+                      : undefined,
+                }}
+              >
+                {cell.label && (
+                  <div className="cell-label">{cell.label}</div>
+                )}
+                {cell.secret && <div className="cell-secret" title="Secret Passage">★</div>}
+                <div className="cell-tokens">
+                  {playersHere.map((player) => {
+                    const color =
+                      CHARACTER_COLORS[player.characterId] || "#4a5568";
+                    return (
+                      <span
+                        key={player.id}
+                        className="token token-player"
+                        style={{ backgroundColor: color }}
+                        title={`${player.characterId} (${player.name})`}
+                      />
+                    );
+                  })}
+                  {weaponsHere.map((weaponId) => (
+                    <span
+                      key={weaponId}
+                      className="token token-weapon"
+                      title={weaponId.replace(/^weapon:/, "")}
+                    />
+                  ))}
+                </div>
               </div>
             );
-          })}
-        </div>
+          })
+        )}
       </div>
     </div>
   );

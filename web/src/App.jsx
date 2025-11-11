@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { connectWebSocket, disconnectWebSocket, sendMessage } from './utils/wsClient';
 import GameLobby from './components/GameLobby';
 import GameBoard from './components/GameBoard';
+import InfoPanel from './components/InfoPanel';
 import MessageLog from './components/MessageLog';
 import Controls from './components/Controls';
 import './App.css';
@@ -18,6 +19,7 @@ function App() {
   const [gameState, setGameState] = useState(null);
   const [currentPlayer, setCurrentPlayer] = useState(null);
   const [gameStarted, setGameStarted] = useState(false);
+  const [leaderId, setLeaderId] = useState(null);
   
   // UI state
   const [messages, setMessages] = useState([]);
@@ -25,6 +27,30 @@ function App() {
   const [showJoinForm, setShowJoinForm] = useState(true);
   const [error, setError] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
+  const [handCards, setHandCards] = useState([]);
+  const [isMyTurn, setIsMyTurn] = useState(false);
+  const [awaitingDisprove, setAwaitingDisprove] = useState(false);
+  const [refutePrompt, setRefutePrompt] = useState(null);
+  const [accusationResult, setAccusationResult] = useState(null);
+  const [revealedSolution, setRevealedSolution] = useState(null);
+  const [showLog, setShowLog] = useState(true);
+
+  useEffect(() => {
+    const baseTitle = 'Clue-less (Minimal)';
+    if (currentPlayer?.name) {
+      document.title = `${baseTitle} - ${currentPlayer.name}`;
+    } else if (gameId) {
+      document.title = `${baseTitle} - Joined`;
+    } else {
+      document.title = `${baseTitle} - Game Creation`;
+    }
+  }, [currentPlayer?.name, gameId]);
+
+  useEffect(() => {
+    const myId = currentPlayer?.id;
+    const activeId = gameState?.turn?.currentPlayerId;
+    setIsMyTurn(!!myId && !!activeId && myId === activeId);
+  }, [currentPlayer?.id, gameState?.turn?.currentPlayerId]);
 
   // WebSocket connection
   useEffect(() => {
@@ -37,13 +63,12 @@ function App() {
     const handleDisconnect = () => {
       setConnected(false);
       setConnecting(false);
+      setLeaderId(null);
       addMessage('Disconnected from server', 'system');
     };
 
     const handleMessage = (message) => {
       console.log('Received message:', message);
-      addMessage(JSON.stringify(message, null, 2), 'received');
-      
       // Handle specific message types
       switch (message.type) {
         case 'INFO':
@@ -58,6 +83,17 @@ function App() {
           setPlayers(message.payload.players || []);
           setCurrentPlayer(message.payload.you);
           setGameStarted(message.payload.turn?.phase === 'move');
+          setLeaderId(message.payload.leaderId || null);
+          if (message.payload.solution) {
+            setRevealedSolution(message.payload.solution);
+          }
+          if (message.payload.pendingSuggestion) {
+            setRefutePrompt(message.payload.pendingSuggestion);
+            setAwaitingDisprove(true);
+          } else {
+            setAwaitingDisprove(false);
+            setRefutePrompt(null);
+          }
           break;
           
         case 'PLAYER_JOINED':
@@ -80,24 +116,28 @@ function App() {
           
         case 'LOBBY_STATE':
           setPlayers(message.payload.players || []);
+          setLeaderId(message.payload.leaderId || null);
           // Check if we need to update game state
-          if (gameState) {
-            setGameState({
-              ...gameState,
-              players: message.payload.players || []
-            });
-          }
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              players: message.payload.players || prev.players,
+              leaderId: message.payload.leaderId ?? prev.leaderId
+            };
+          });
           break;
           
         case 'CHARACTER_SELECTED':
           addMessage(`${message.payload.characterId} was selected`, 'player-action');
           // Update the player who selected the character
-          if (message.payload.playerId === currentPlayer?.id) {
-            setCurrentPlayer({
-              ...currentPlayer,
+          setCurrentPlayer(prev => {
+            if (!prev || prev.id !== message.payload.playerId) return prev;
+            return {
+              ...prev,
               characterId: message.payload.characterId
-            });
-          }
+            };
+          });
           // Update in the players list
           setPlayers(prevPlayers => 
             prevPlayers.map(p => 
@@ -106,86 +146,218 @@ function App() {
                 : p
             )
           );
+          // Update game state players
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              players: (prev.players || []).map(p =>
+                p.id === message.payload.playerId
+                  ? { ...p, characterId: message.payload.characterId }
+                  : p
+              )
+            };
+          });
           break;
           
         case 'GAME_STARTED':
           setGameStarted(true);
           addMessage('Game started!', 'system');
+          setRevealedSolution(null);
+          setAccusationResult(null);
           // Update game state to reflect game started
-          if (gameState) {
-            setGameState({
-              ...gameState,
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
               turn: {
-                ...gameState.turn,
+                ...prev.turn,
                 phase: 'move'
               }
-            });
-          }
+            };
+          });
           break;
           
-        case 'TURN_START':
-          // Use playerName if provided, fallback to lookup
-          let turnPlayerName = message.payload.playerName;
-          if (!turnPlayerName) {
-            const turnPlayer = players.find(p => p.id === message.payload.playerId);
-            turnPlayerName = turnPlayer ? turnPlayer.name : message.payload.playerId;
+        case 'TURN_START': {
+          const {
+            playerId: activeId,
+            playerName,
+            movementAllowance,
+            movesRemaining
+          } = message.payload;
+          const turnPlayerName = playerName || players.find(p => p.id === activeId)?.name || activeId;
+          const moveText =
+            movementAllowance != null
+              ? ` (moves available: ${movementAllowance}, remaining: ${movesRemaining ?? '?'})`
+              : '';
+          addMessage(`It's ${turnPlayerName}'s turn${moveText}`, 'turn');
+          setAwaitingDisprove(false);
+          setRefutePrompt(null);
+          if (activeId === currentPlayer?.id) {
+            setAccusationResult(null);
           }
-          addMessage(`It's ${turnPlayerName}'s turn`, 'turn');
-          // Update game state with current turn info
-          if (gameState) {
-            setGameState({
-              ...gameState,
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
               turn: {
-                ...gameState.turn,
-                currentPlayerId: message.payload.playerId,
-                phase: 'move'
+                ...prev.turn,
+                currentPlayerId: activeId,
+                phase: 'move',
+                movementAllowance:
+                  movementAllowance ?? prev.turn?.movementAllowance ?? null,
+                movesRemaining: movesRemaining ?? prev.turn?.movesRemaining ?? null,
+                legalMoves: Array.isArray(message.payload.legalMoves)
+                  ? message.payload.legalMoves
+                  : prev.turn?.legalMoves || []
               }
-            });
-          }
+            };
+          });
           break;
+        }
           
         case 'PLAYER_MOVED':
-          addMessage(`Player moved to ${message.payload.to.zone}`, 'player-action');
-          // Update player position in game state
-          if (gameState && message.payload.playerId) {
-            setGameState({
-              ...gameState,
-              players: gameState.players.map(p =>
+          addMessage(`Player moved to ${message.payload.to.zone} ${message.payload.to.id || ''}`.trim(), 'player-action');
+          if (message.payload.playerId) {
+            setGameState(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                players: prev.players.map(p =>
+                  p.id === message.payload.playerId
+                    ? { ...p, position: message.payload.to }
+                    : p
+                ),
+                turn: {
+                  ...prev.turn,
+                  movesRemaining: message.payload.movesRemaining ?? prev.turn?.movesRemaining ?? null,
+                  movementAllowance:
+                    message.payload.movementAllowance ?? prev.turn?.movementAllowance ?? null,
+                  legalMoves: Array.isArray(message.payload.legalMoves)
+                    ? message.payload.legalMoves
+                    : prev.turn?.legalMoves || []
+                }
+              };
+            });
+            setPlayers(prev =>
+              prev.map(p =>
                 p.id === message.payload.playerId
                   ? { ...p, position: message.payload.to }
                   : p
               )
-            });
+            );
           }
           break;
           
-        case 'SUGGESTION_MADE':
-          addMessage(`Suggestion made: ${message.payload.suspectId} with ${message.payload.weaponId}`, 'player-action');
+        case 'SUGGESTION_MADE': {
+          const { suspectId, weaponId, by } = message.payload;
+          const suggester = players.find(p => p.id === by)?.name || by;
+          addMessage(`${suggester} suggested ${suspectId} with ${weaponId}`, 'player-action');
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              pendingSuggestion: {
+                by,
+                suspectId,
+                weaponId,
+                roomId: message.payload.roomId
+              }
+            };
+          });
           break;
-          
-        case 'PROMPT_DISPROVE':
-          addMessage(`You are being prompted to disprove a suggestion`, 'player-action');
+        }
+
+        case 'PROMPT_DISPROVE': {
+          const { suggestion, nextPlayerId } = message.payload;
+          const prompt = nextPlayerId === currentPlayer?.id
+            ? 'You are being prompted to disprove a suggestion'
+            : 'Waiting for the next player to disprove';
+          addMessage(prompt, 'player-action');
+          setRefutePrompt({ ...suggestion, nextPlayerId });
+          setAwaitingDisprove(true);
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              pendingSuggestion: {
+                ...suggestion,
+                nextPlayerId
+              }
+            };
+          });
           break;
-          
+        }
+
         case 'DISPROVE_RESULT':
           if (message.payload.disproverId) {
-            addMessage('Suggestion was disproved!', 'player-action');
+            const personalCard = message.payload.cardId ? ` (card shown: ${message.payload.cardId})` : '';
+            addMessage(`Suggestion was disproved${personalCard}!`, 'player-action');
           } else {
             addMessage('No one could disprove the suggestion', 'player-action');
           }
+          setAwaitingDisprove(false);
+          setRefutePrompt(null);
+          setGameState(prev => prev ? { ...prev, pendingSuggestion: null } : prev);
           break;
           
-        case 'ACCUSATION_RESOLVED':
+        case 'ACCUSATION_RESOLVED': {
           if (message.payload.correct) {
             addMessage('ACCUSATION CORRECT! Game Over!', 'game-over');
           } else {
             addMessage('Accusation was incorrect', 'player-action');
+            if (message.payload.eliminatedPlayerId) {
+              const eliminated = players.find(p => p.id === message.payload.eliminatedPlayerId);
+              const eliminatedName = eliminated ? eliminated.name : message.payload.eliminatedPlayerId;
+              addMessage(`${eliminatedName} has been eliminated from the game.`, 'player-action');
+            }
+          }
+          if (message.payload.by === currentPlayer?.id) {
+            setAccusationResult({
+              correct: message.payload.correct,
+              by: message.payload.by
+            });
+          } else {
+            setAccusationResult(null);
+          }
+          setAwaitingDisprove(false);
+          setRefutePrompt(null);
+          setGameState(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              pendingSuggestion: null,
+              players: message.payload.eliminatedPlayerId
+                ? prev.players.map(p =>
+                    p.id === message.payload.eliminatedPlayerId
+                      ? { ...p, eliminated: true }
+                      : p
+                  )
+                : prev.players
+            };
+          });
+          if (message.payload.eliminatedPlayerId) {
+            setPlayers(prev =>
+              prev.map(p =>
+                p.id === message.payload.eliminatedPlayerId
+                  ? { ...p, eliminated: true }
+                  : p
+              )
+            );
           }
           break;
+        }
           
         case 'GAME_OVER':
           addMessage(`Game Over! Winner: ${message.payload.winnerId}`, 'game-over');
           setGameStarted(false);
+          setAwaitingDisprove(false);
+          setRefutePrompt(null);
+          setAccusationResult(null);
+          if (message.payload.solution) {
+            setRevealedSolution(message.payload.solution);
+          }
+          setGameState(prev => prev ? { ...prev, pendingSuggestion: null } : prev);
           break;
           
         case 'ERROR':
@@ -193,9 +365,12 @@ function App() {
           setError(message.payload.message);
           break;
           
-        case 'YOUR_HAND':
-          addMessage(`Your hand: ${JSON.stringify(message.payload.cards)}`, 'hand');
+        case 'YOUR_HAND': {
+          const cards = Array.isArray(message.payload.cards) ? message.payload.cards : [];
+          setHandCards(cards);
+          addMessage(`Your hand contains ${cards.length} card${cards.length === 1 ? '' : 's'}.`, 'hand');
           break;
+        }
           
         case 'PONG':
           addMessage('Pong received', 'ping');
@@ -283,6 +458,17 @@ function App() {
     sendMessage(message);
   };
 
+  const handleEndTurn = () => {
+    const message = {
+      type: 'END_TURN',
+      gameId,
+      payload: {},
+      ts: new Date().toISOString(),
+      version: '1.0'
+    };
+    sendMessage(message);
+  };
+
   const handleSuggestion = (suspectId, weaponId) => {
     const message = {
       type: 'MAKE_SUGGESTION',
@@ -348,6 +534,12 @@ function App() {
     setConnected(false);
     // WebSocket will reconnect automatically
   };
+
+  const handlePlayAgain = () => {
+    window.location.reload();
+  };
+
+  const toggleLog = () => setShowLog((prev) => !prev);
 
   return (
     <div className="app">
@@ -423,36 +615,64 @@ function App() {
             {error && <div className="error">{error}</div>}
           </div>
         ) : (
-          <div className="game-container">
-            <div className="game-sidebar">
-              <GameLobby 
-                players={players}
-                currentPlayer={currentPlayer}
-                gameStarted={gameStarted}
-                onSelectCharacter={handleSelectCharacter}
-                onStartGame={handleStartGame}
-              />
-              
+          <div className="game-layout">
+            <div className="controls-row">
               <Controls
                 gameStarted={gameStarted}
                 currentPlayer={currentPlayer}
+                isMyTurn={isMyTurn}
+                awaitingDisprove={awaitingDisprove}
+                refutePrompt={refutePrompt}
+                legalMoves={gameState?.turn?.legalMoves || []}
+                hand={handCards}
+                accusationResult={accusationResult}
+                solutionRevealed={!!revealedSolution}
                 onMove={handleMove}
                 onSuggestion={handleSuggestion}
                 onDisprove={handleDisprove}
                 onAccusation={handleAccusation}
                 onChat={handleChat}
                 onPing={handlePing}
+                onEndTurn={handleEndTurn}
               />
             </div>
-            
-            <div className="game-main">
+
+            <div className="board-section">
               <GameBoard 
                 gameState={gameState}
-                currentPlayer={currentPlayer}
                 gameStarted={gameStarted}
               />
-              
-              <MessageLog messages={messages} />
+            </div>
+
+            <div className="lower-section">
+              <GameLobby 
+                players={players}
+                currentPlayer={currentPlayer}
+                gameStarted={gameStarted}
+                leaderId={leaderId}
+                onSelectCharacter={handleSelectCharacter}
+                onStartGame={handleStartGame}
+              />
+              <div className="info-stack">
+                <InfoPanel
+                  gameState={gameState}
+                  currentPlayer={currentPlayer}
+                  gameStarted={gameStarted}
+                  isMyTurn={isMyTurn}
+                  awaitingDisprove={awaitingDisprove}
+                  refutePrompt={refutePrompt}
+                  hand={handCards}
+                  solution={revealedSolution}
+                  accusationResult={accusationResult}
+                  onPlayAgain={handlePlayAgain}
+                />
+                <div className="log-toggle">
+                  <button onClick={toggleLog} className="control-btn log-btn">
+                    {showLog ? 'Hide' : 'Show'} Message Log
+                  </button>
+                </div>
+                {showLog && <MessageLog messages={messages} />}
+              </div>
             </div>
           </div>
         )}
