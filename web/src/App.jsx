@@ -179,10 +179,18 @@ function App() {
           break;
           
         case 'TURN_START': {
-          const { playerId: activeId, playerName, diceTotal, movesRemaining } = message.payload;
+          const {
+            playerId: activeId,
+            playerName,
+            movementAllowance,
+            movesRemaining
+          } = message.payload;
           const turnPlayerName = playerName || players.find(p => p.id === activeId)?.name || activeId;
-          const diceText = diceTotal != null ? ` (dice: ${diceTotal}, remaining: ${movesRemaining ?? '?'})` : '';
-          addMessage(`It's ${turnPlayerName}'s turn${diceText}`, 'turn');
+          const moveText =
+            movementAllowance != null
+              ? ` (moves available: ${movementAllowance}, remaining: ${movesRemaining ?? '?'})`
+              : '';
+          addMessage(`It's ${turnPlayerName}'s turn${moveText}`, 'turn');
           setAwaitingDisprove(false);
           setRefutePrompt(null);
           if (activeId === currentPlayer?.id) {
@@ -196,7 +204,8 @@ function App() {
                 ...prev.turn,
                 currentPlayerId: activeId,
                 phase: 'move',
-                diceTotal: diceTotal ?? prev.turn?.diceTotal ?? null,
+                movementAllowance:
+                  movementAllowance ?? prev.turn?.movementAllowance ?? null,
                 movesRemaining: movesRemaining ?? prev.turn?.movesRemaining ?? null,
                 legalMoves: Array.isArray(message.payload.legalMoves)
                   ? message.payload.legalMoves
@@ -222,7 +231,8 @@ function App() {
                 turn: {
                   ...prev.turn,
                   movesRemaining: message.payload.movesRemaining ?? prev.turn?.movesRemaining ?? null,
-                  diceTotal: message.payload.diceTotal ?? prev.turn?.diceTotal ?? null,
+                  movementAllowance:
+                    message.payload.movementAllowance ?? prev.turn?.movementAllowance ?? null,
                   legalMoves: Array.isArray(message.payload.legalMoves)
                     ? message.payload.legalMoves
                     : prev.turn?.legalMoves || []
@@ -605,17 +615,8 @@ function App() {
             {error && <div className="error">{error}</div>}
           </div>
         ) : (
-          <div className="game-container">
-            <div className="game-sidebar">
-              <GameLobby 
-                players={players}
-                currentPlayer={currentPlayer}
-                gameStarted={gameStarted}
-                leaderId={leaderId}
-                onSelectCharacter={handleSelectCharacter}
-                onStartGame={handleStartGame}
-              />
-              
+          <div className="game-layout">
+            <div className="controls-row">
               <Controls
                 gameStarted={gameStarted}
                 currentPlayer={currentPlayer}
@@ -635,15 +636,24 @@ function App() {
                 onEndTurn={handleEndTurn}
               />
             </div>
-            
-            <div className="game-main">
-              <div className="board-section">
-                <GameBoard 
-                  gameState={gameState}
-                  gameStarted={gameStarted}
-                />
-              </div>
-              <div className="info-section">
+
+            <div className="board-section">
+              <GameBoard 
+                gameState={gameState}
+                gameStarted={gameStarted}
+              />
+            </div>
+
+            <div className="lower-section">
+              <GameLobby 
+                players={players}
+                currentPlayer={currentPlayer}
+                gameStarted={gameStarted}
+                leaderId={leaderId}
+                onSelectCharacter={handleSelectCharacter}
+                onStartGame={handleStartGame}
+              />
+              <div className="info-stack">
                 <InfoPanel
                   gameState={gameState}
                   currentPlayer={currentPlayer}

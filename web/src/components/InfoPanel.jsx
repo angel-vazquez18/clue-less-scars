@@ -139,8 +139,10 @@ const InfoPanel = ({
           <strong>Current Turn:</strong> {currentTurnName}
         </div>
         <div className="info-item">
-          <strong>Dice Total:</strong>{" "}
-          {gameState.turn?.diceTotal != null ? gameState.turn.diceTotal : "—"}
+          <strong>Moves Available:</strong>{" "}
+          {gameState.turn?.movementAllowance != null
+            ? gameState.turn.movementAllowance
+            : "—"}
         </div>
         <div className="info-item">
           <strong>Moves Remaining:</strong>{" "}

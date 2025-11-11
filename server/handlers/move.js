@@ -93,6 +93,19 @@ function handleRequestMove(ws, env) {
     }, requestId));
   }
 
+  if (inferredZone === 'HALLWAY') {
+    const occupied = Object.values(game.players).some(other => {
+      if (!other || other.id === player.id) return false;
+      return other.position?.id === trimmedTargetId;
+    });
+    if (occupied) {
+      return safe(ws, makeEnv(T.ERROR, gameId, {
+        code: 'SPACE_OCCUPIED',
+        message: 'Another player is already occupying that hallway'
+      }, requestId));
+    }
+  }
+
   const adjacent = areAdjacentLocations(fromPosition.id, trimmedTargetId);
   if (!adjacent) {
     return safe(ws, makeEnv(T.ERROR, gameId, {
@@ -140,6 +153,9 @@ function handleRequestMove(ws, env) {
   if (isSecret) {
     turnState.secretPassageUsed = true;
   }
+  if (inferredZone === 'ROOM') {
+    turnState.movesRemaining = 0;
+  }
   const legalMoves = updateLegalMoves(game);
 
   broadcast(game, makeEnv(T.PLAYER_MOVED, gameId, { 
@@ -147,7 +163,7 @@ function handleRequestMove(ws, env) {
     from, 
     to: player.position,
     movesRemaining: turnState.movesRemaining,
-    diceTotal: turnState.diceTotal,
+    movementAllowance: turnState.movementAllowance,
     legalMoves
   }));
 }

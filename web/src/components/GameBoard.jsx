@@ -1,17 +1,12 @@
 import React, { useMemo } from "react";
-import BoardGrid from "./BoardGrid";
-
-const startingPlaces = {
-  "Miss Scarlet": "H2",
-  "Professor Plum": "V1",
-  "Colonel Mustard": "V3",
-  "Mrs. Peacock": "V4",
-  "Mr. Green": "H5",
-  "Mrs. White": "H6",
-};
+import ClueLessBoard, { sampleBoardConfig } from "./ClueLessBoard";
 
 const GameBoard = ({ gameState, gameStarted }) => {
-  const positions = useMemo(() => startingPlaces, []);
+  const boardConfig = gameState?.board?.config || sampleBoardConfig;
+  const positions = useMemo(
+    () => ({ ...(boardConfig?.startingPositions || {}) }),
+    [boardConfig?.startingPositions]
+  );
 
   if (!gameState) {
     return (
@@ -36,7 +31,11 @@ const GameBoard = ({ gameState, gameStarted }) => {
         </div>
       )}
       <div className="board-visual">
-        <BoardGrid gameState={gameState} startingPositions={positions} />
+        <ClueLessBoard
+          boardConfig={boardConfig}
+          gameState={gameState}
+          startingPositions={positions}
+        />
       </div>
     </div>
   );

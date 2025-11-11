@@ -8,7 +8,7 @@ function buildTurnPayload(game, currentPlayerId, turnState, reason) {
     currentPlayerId,
     phase: game.started ? 'move' : 'lobby',
     order: game.turnOrder,
-    diceTotal: turnState?.diceTotal ?? null,
+    movementAllowance: turnState?.movementAllowance ?? null,
     movesRemaining: turnState?.movesRemaining ?? null,
     legalMoves: turnState?.legalMoves ?? []
   };
@@ -51,7 +51,7 @@ function broadcastTurnState(game, currentPlayerId, turnState, reason) {
   const payload = {
     playerId: currentPlayerId,
     playerName: currentPlayer?.name || 'Unknown',
-    diceTotal: turnState?.diceTotal ?? null,
+    movementAllowance: turnState?.movementAllowance ?? null,
     movesRemaining: turnState?.movesRemaining ?? null,
     legalMoves: turnState?.legalMoves ?? []
   };

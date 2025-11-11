@@ -1,66 +1,129 @@
 const { v4: uuidv4 } = require('uuid');
 
+const BOARD_CONFIG = require('../data/boardConfig.json');
+
 // ---- Minimal dealing & envelope (Clue-Less) ----
 const SUSPECTS = ['mustard','plum','scarlet','peacock','green','white'];
 const WEAPONS  = ['knife','candlestick','revolver','rope','leadpipe','wrench'];
 const ROOMS    = ['kitchen','ballroom','conservatory','dining','billiard','library','lounge','hall','study'];
 
-const STARTING_POSITIONS = Object.freeze({
-  'Miss Scarlet': { id: 'H2' },
-  'Professor Plum': { id: 'V1' },
-  'Colonel Mustard': { id: 'V3' },
-  'Mrs. Peacock': { id: 'V4' },
-  'Mr. Green': { id: 'H5' },
-  'Mrs. White': { id: 'H6' },
-});
+const DEFAULT_MOVES_PER_TURN = 4;
 
-const SECRET_PASSAGES = Object.freeze({
-  Study: 'Kitchen',
-  Kitchen: 'Study',
-  Lounge: 'Conservatory',
-  Conservatory: 'Lounge'
-});
-
-const RAW_BOARD_CONNECTIONS = Object.freeze({
-  Study: ['H1', 'V1', 'Kitchen'],
-  H1: ['Hall'],
-  Hall: ['H1', 'H2', 'V2'],
-  H2: ['Hall', 'Lounge'],
-  Lounge: ['H2', 'V3', 'Conservatory'],
-  V1: ['Study', 'Library'],
-  V2: ['Hall', 'Billiard Room'],
-  V3: ['Lounge', 'Dining Room'],
-  Library: ['V1', 'H3', 'V4'],
-  H3: ['Library', 'Billiard Room'],
-  'Billiard Room': ['H3', 'H4', 'V2', 'V5'],
-  H4: ['Billiard Room', 'Dining Room'],
-  'Dining Room': ['V3', 'V6', 'H4'],
-  V4: ['Library', 'Conservatory'],
-  V5: ['Billiard Room', 'Ballroom'],
-  V6: ['Dining Room', 'Kitchen'],
-  Conservatory: ['V4', 'H5', 'Lounge'],
-  H5: ['Conservatory', 'Ballroom'],
-  Ballroom: ['H5', 'H6', 'V5'],
-  H6: ['Ballroom', 'Kitchen'],
-  Kitchen: ['H6', 'V6', 'Study']
-});
-
-function buildBoardGraph(raw) {
-  const map = {};
-  for (const [from, neighbors] of Object.entries(raw)) {
-    if (!map[from]) map[from] = new Set();
-    neighbors.forEach(to => {
-      map[from].add(to);
-      if (!map[to]) map[to] = new Set();
-      map[to].add(from);
-    });
-  }
-  return Object.freeze(Object.fromEntries(
-    Object.entries(map).map(([key, set]) => [key, Object.freeze(Array.from(set))])
-  ));
+function inferZoneForLocation(locationId) {
+  if (!locationId) return null;
+  return (locationId.startsWith('H') || locationId.startsWith('V')) ? 'HALLWAY' : 'ROOM';
 }
 
-const BOARD_GRAPH = buildBoardGraph(RAW_BOARD_CONNECTIONS);
+const STARTING_POSITIONS = Object.freeze(
+  Object.fromEntries(
+    Object.entries(BOARD_CONFIG.startingPositions || {}).map(([character, positionId]) => [
+      character,
+      { id: positionId }
+    ])
+  )
+);
+
+const ROOM_DOOR_LOOKUP = Object.freeze(
+  (BOARD_CONFIG.roomDoors || []).reduce((acc, { roomId, hallwayId }) => {
+    if (!acc[roomId]) acc[roomId] = new Set();
+    acc[roomId].add(hallwayId);
+    return acc;
+  }, Object.create(null))
+);
+
+const SECRET_PASSAGES = Object.freeze(
+  (BOARD_CONFIG.secretPassages || []).reduce((acc, { fromId, toId }) => {
+    if (fromId && toId) {
+      acc[fromId] = toId;
+    }
+    return acc;
+  }, Object.create(null))
+);
+
+function buildBoardGraphFromConfig(config) {
+  const columns = config.gridSize?.columns ?? 0;
+  const rows = config.gridSize?.rows ?? 0;
+  const grid = Array.from({ length: rows }, () => Array(columns).fill(null));
+
+  (config.cells || []).forEach(cell => {
+    const width = cell.width ?? 1;
+    const height = cell.height ?? 1;
+    for (let dy = 0; dy < height; dy += 1) {
+      for (let dx = 0; dx < width; dx += 1) {
+        const x = cell.x + dx;
+        const y = cell.y + dy;
+        if (grid[y] && x >= 0 && x < columns) {
+          grid[y][x] = cell.id;
+        }
+      }
+    }
+  });
+
+  const adjacency = new Map();
+  const addEdge = (from, to) => {
+    if (!from || !to || from === to) return;
+    if (!adjacency.has(from)) adjacency.set(from, new Set());
+    adjacency.get(from).add(to);
+  };
+
+  const allowDoor = (roomId, hallwayId) =>
+    !!ROOM_DOOR_LOOKUP[roomId] && ROOM_DOOR_LOOKUP[roomId].has(hallwayId);
+
+  for (let y = 0; y < rows; y += 1) {
+    for (let x = 0; x < columns; x += 1) {
+      const id = grid[y]?.[x];
+      if (!id) continue;
+      const neighbors = [
+        [x, y - 1],
+        [x + 1, y],
+        [x, y + 1],
+        [x - 1, y]
+      ];
+      neighbors.forEach(([nx, ny]) => {
+        const neighborId = grid[ny]?.[nx];
+        if (!neighborId || neighborId === id) return;
+        const zoneA = inferZoneForLocation(id);
+        const zoneB = inferZoneForLocation(neighborId);
+
+        let connect = false;
+        if (zoneA === 'HALLWAY' && zoneB === 'HALLWAY') {
+          connect = true;
+        } else if (zoneA === 'ROOM' && zoneB === 'HALLWAY') {
+          connect = allowDoor(id, neighborId);
+        } else if (zoneA === 'HALLWAY' && zoneB === 'ROOM') {
+          connect = allowDoor(neighborId, id);
+        }
+
+        if (connect) {
+          addEdge(id, neighborId);
+          addEdge(neighborId, id);
+        }
+      });
+    }
+  }
+
+  (config.secretPassages || []).forEach(({ fromId, toId }) => {
+    if (fromId && toId) {
+      addEdge(fromId, toId);
+      addEdge(toId, fromId);
+    }
+  });
+
+  const allIds = new Set((config.cells || []).map(cell => cell.id));
+  allIds.forEach(id => {
+    if (!adjacency.has(id)) {
+      adjacency.set(id, new Set());
+    }
+  });
+
+  return Object.freeze(
+    Object.fromEntries(
+      Array.from(adjacency.entries(), ([key, set]) => [key, Object.freeze(Array.from(set))])
+    )
+  );
+}
+
+const BOARD_GRAPH = buildBoardGraphFromConfig(BOARD_CONFIG);
 const VALID_LOCATIONS = new Set(Object.keys(BOARD_GRAPH));
 
 function initialBoardState() {
@@ -72,7 +135,8 @@ function initialBoardState() {
       ])
     ),
     suspectTokens: {},
-    weaponTokens: {}
+    weaponTokens: {},
+    config: BOARD_CONFIG
   };
 }
 
@@ -83,11 +147,6 @@ function shuffle(arr) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
-}
-
-function inferZoneForLocation(locationId) {
-  if (!locationId) return null;
-  return (locationId.startsWith('H') || locationId.startsWith('V')) ? 'HALLWAY' : 'ROOM';
 }
 
 function isValidLocation(locationId) {
@@ -114,6 +173,17 @@ function computeLegalMoves(game, playerId, turnState) {
   const maxSteps = turnState.movesRemaining || 0;
   if (maxSteps <= 0) return [];
 
+  const occupiedHallways = new Set();
+  Object.values(game.players).forEach(other => {
+    if (!other || other.id === playerId) return;
+    const locId = other.position?.id;
+    if (!locId) return;
+    const zone = inferZoneForLocation(locId);
+    if (zone === 'HALLWAY') {
+      occupiedHallways.add(locId);
+    }
+  });
+
   const results = new Set();
   const queue = [{ id: startId, stepsLeft: maxSteps, secretUsed: !!turnState.secretPassageUsed }];
   const visited = new Set([`${startId}:${turnState.secretPassageUsed ? 1 : 0}:${maxSteps}`]);
@@ -127,13 +197,18 @@ function computeLegalMoves(game, playerId, turnState) {
       if (isSecret && secretUsed) continue;
       const cost = isSecret ? stepsLeft : 1;
       if (stepsLeft < cost) continue;
+      const zone = inferZoneForLocation(next);
+      if (!zone) continue;
+      if (zone === 'HALLWAY' && occupiedHallways.has(next)) continue;
       const nextStepsLeft = stepsLeft - cost;
       const nextSecretUsed = secretUsed || isSecret;
       const visitKey = `${next}:${nextSecretUsed ? 1 : 0}:${nextStepsLeft}`;
       if (visited.has(visitKey)) continue;
       visited.add(visitKey);
       if (next !== startId) results.add(next);
-      if (nextStepsLeft > 0) {
+
+      const enteringRoom = zone === 'ROOM';
+      if (!enteringRoom && nextStepsLeft > 0) {
         queue.push({ id: next, stepsLeft: nextStepsLeft, secretUsed: nextSecretUsed });
       }
     }
@@ -150,11 +225,6 @@ function updateLegalMoves(game) {
   const legal = computeLegalMoves(game, game.turnState.playerId, game.turnState);
   game.turnState.legalMoves = legal;
   return legal;
-}
-
-function rollDice() {
-  const die = () => Math.floor(Math.random() * 6) + 1;
-  return die() + die();
 }
 
 function makeEnvelopeAndDeal(game) {
@@ -284,11 +354,10 @@ function ensureTurnMoveState(game) {
   }
 
   if (!game.turnState || game.turnState.playerId !== currentPlayerId) {
-    const diceTotal = rollDice();
     game.turnState = {
       playerId: currentPlayerId,
-      diceTotal,
-      movesRemaining: diceTotal,
+      movementAllowance: DEFAULT_MOVES_PER_TURN,
+      movesRemaining: DEFAULT_MOVES_PER_TURN,
       secretPassageUsed: false,
       legalMoves: []
     };
