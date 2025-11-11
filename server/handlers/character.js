@@ -14,6 +14,20 @@ function handleSelectCharacter(ws, env) {
     }, requestId));
   }
 
+  if (game.started || game.ended) {
+    return safe(ws, makeEnv(T.ERROR, gameId, { 
+      code: 'GAME_ALREADY_STARTED', 
+      message: 'Cannot change character after the game has started' 
+    }, requestId));
+  }
+
+  if (player.eliminated) {
+    return safe(ws, makeEnv(T.ERROR, gameId, { 
+      code: 'PLAYER_ELIMINATED', 
+      message: 'Eliminated players cannot select characters' 
+    }, requestId));
+  }
+
   const { characterId } = payload || {};
   if (!characterId || typeof characterId !== 'string') {
     return safe(ws, makeEnv(T.ERROR, gameId, { 

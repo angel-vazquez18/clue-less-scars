@@ -9,6 +9,7 @@ const GameLobby = ({
   players, 
   currentPlayer, 
   gameStarted, 
+  leaderId,
   onSelectCharacter, 
   onStartGame 
 }) => {
@@ -26,7 +27,11 @@ const GameLobby = ({
     setShowCharacterSelect(false);
   };
 
-  const canStartGame = players.length >= 4 && !gameStarted;
+  const isLeader = leaderId && currentPlayer && currentPlayer.id === leaderId;
+  const leaderName = players.find(p => p.id === leaderId)?.name || null;
+  const lobbyReady = players.length >= 4 && !gameStarted;
+  const allCharactersSelected = players.length > 0 && players.every(p => !!p.characterId);
+  const canStartGame = lobbyReady && allCharactersSelected && isLeader;
   const isCurrentPlayer = currentPlayer && currentPlayer.id;
 
   // Debug logging
@@ -46,6 +51,9 @@ const GameLobby = ({
         <div className="info-item">
           <strong>Status:</strong> {gameStarted ? 'In Progress' : 'Waiting'}
         </div>
+        <div className="info-item">
+          <strong>Leader:</strong> {leaderName || 'TBD'}
+        </div>
         {currentPlayer && (
           <div className="info-item">
             <strong>You:</strong> {currentPlayer.name}
@@ -61,8 +69,14 @@ const GameLobby = ({
         ) : (
           <div className="players">
             {players.map((player, index) => (
-              <div key={player.id || index} className="player-item">
+              <div
+                key={player.id || index}
+                className={`player-item ${player.eliminated ? 'eliminated' : ''}`}
+              >
                 <div className="player-name">{player.name}</div>
+                {player.isLeader && (
+                  <span className="leader-badge">Leader</span>
+                )}
                 <div className="player-character">
                   {player.characterId || 'No character'}
                 </div>
@@ -71,6 +85,9 @@ const GameLobby = ({
                     {player.position.zone}: {player.position.id || 'Unknown'}
                   </div>
                 )}
+                <div className="player-status">
+                  {player.eliminated ? 'Eliminated' : 'Active'}
+                </div>
               </div>
             ))}
           </div>
@@ -129,15 +146,33 @@ const GameLobby = ({
       )}
 
       {/* Start Game Button */}
-      {canStartGame && isCurrentPlayer && (
-        <div className="start-game">
-          <button 
-            onClick={onStartGame}
-            className="start-game-btn"
-          >
-            Start Game
-          </button>
-        </div>
+      {lobbyReady && isCurrentPlayer && (
+        isLeader ? (
+          <div className="start-game">
+            <button 
+              onClick={onStartGame}
+              className="start-game-btn"
+              disabled={!canStartGame}
+              title={
+                canStartGame
+                  ? 'Start the game'
+                  : 'All players must select characters before starting'
+              }
+            >
+              Start Game
+            </button>
+            {!allCharactersSelected && (
+              <p className="hint">Waiting for all players to select characters…</p>
+            )}
+          </div>
+        ) : (
+          <div className="waiting-leader">
+            <p>Waiting for the lobby leader to start the game...</p>
+            {!allCharactersSelected && (
+              <p className="hint">All players must select characters first.</p>
+            )}
+          </div>
+        )
       )}
 
       {/* Game Status */}

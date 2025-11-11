@@ -1,6 +1,7 @@
 const { makeEnv } = require('../schema/envelope');
 const { broadcast } = require('../utils/send');
-const { resolveGameAndPlayer, startGame, getCurrentPlayer } = require('../state/games');
+const { resolveGameAndPlayer, startGame, ensureActiveTurn } = require('../state/games');
+const { broadcastTurnState } = require('./turn');
 const T = require('../schema/types');
 
 function handleStartGame(ws, env) {
@@ -22,6 +23,14 @@ function handleStartGame(ws, env) {
     }, requestId));
   }
 
+  // Only lobby leader can start the game
+  if (game.leaderId !== player.id) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'NOT_LEADER',
+      message: 'Only the lobby leader can start the game'
+    }, requestId));
+  }
+
   // Check minimum players
   if (Object.keys(game.players).length < 4) {
     return safe(ws, makeEnv(T.ERROR, gameId, { 
@@ -30,11 +39,28 @@ function handleStartGame(ws, env) {
     }, requestId));
   }
 
+  // Require all players to have selected a character
+  const missingCharacter = Object.values(game.players).filter(p => !p.characterId);
+  if (missingCharacter.length > 0) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'CHARACTERS_NOT_SELECTED',
+      message: 'All players must select a character before starting'
+    }, requestId));
+  }
+
   // Start the game
   if (!startGame(game)) {
     return safe(ws, makeEnv(T.ERROR, gameId, { 
       code: 'START_FAILED', 
       message: 'Failed to start game' 
+    }, requestId));
+  }
+
+  const { playerId: currentPlayerId, turnState } = ensureActiveTurn(game);
+  if (!currentPlayerId) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'START_FAILED',
+      message: 'Could not determine a starting player'
     }, requestId));
   }
 
@@ -47,13 +73,8 @@ function handleStartGame(ws, env) {
     safe(p.ws, makeEnv(T.YOUR_HAND, gameId, { cards: p.hand }));
   }
 
-  // Start first turn
-  const currentPlayerId = getCurrentPlayer(game);
-  const currentPlayerName = game.players[currentPlayerId]?.name || 'Unknown';
-  broadcast(game, makeEnv(T.TURN_START, gameId, { 
-    playerId: currentPlayerId,
-    playerName: currentPlayerName 
-  }));
+  // Share initial turn state
+  broadcastTurnState(game, currentPlayerId, turnState, 'GAME_STARTED');
 }
 
 function safe(ws, msg) { 

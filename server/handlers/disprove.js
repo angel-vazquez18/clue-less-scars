@@ -1,6 +1,8 @@
 const { makeEnv } = require('../schema/envelope');
 const { broadcast, sendToPlayer } = require('../utils/send');
-const { resolveGameAndPlayer } = require('../state/games');
+const { resolveGameAndPlayer, playerHasCard, isCardRelevantToSuggestion, ensureActiveTurn } = require('../state/games');
+const { promptNextDisprover, concludeNoRefutation } = require('./suggestion');
+const { broadcastTurnState } = require('./turn');
 const T = require('../schema/types');
 
 function handleRespondDisprove(ws, env) {
@@ -14,20 +16,76 @@ function handleRespondDisprove(ws, env) {
     }, requestId));
   }
 
-  // payload.cardId may be undefined/null to indicate can't disprove
-  const { cardId } = payload || {};
-  
-  // If cardId present, ensure player has the card (simplified for now)
-  // For real implementation must check player's hand
-  const disproverId = cardId ? player.id : null;
-  
-  broadcast(game, makeEnv(T.DISPROVE_RESULT, gameId, { disproverId }));
-  
-  // In a real flow you would send specific info back to suggester if cardId present privately
-  if (cardId) {
-    // For now, just broadcast the result
-    // In real game, would notify suggester privately of which card disproved
+  if (!game.started || game.ended) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'GAME_NOT_ACTIVE',
+      message: 'Game is not active'
+    }, requestId));
   }
+
+  const pending = game.pendingSuggestion;
+  if (!pending) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'NO_PENDING_SUGGESTION',
+      message: 'There is no suggestion awaiting disproval'
+    }, requestId));
+  }
+
+  const expectedPlayerId = pending.order[pending.index];
+  if (player.id !== expectedPlayerId) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'NOT_EXPECTED_PLAYER',
+      message: 'You are not the current player asked to disprove'
+    }, requestId));
+  }
+
+  const { cardId = null } = payload || {};
+
+  if (cardId) {
+    if (!playerHasCard(player, cardId)) {
+      return safe(ws, makeEnv(T.ERROR, gameId, {
+        code: 'CARD_NOT_OWNED',
+        message: 'You cannot reveal a card you do not possess'
+      }, requestId));
+    }
+
+    if (!isCardRelevantToSuggestion(cardId, pending)) {
+      return safe(ws, makeEnv(T.ERROR, gameId, {
+        code: 'INVALID_CARD_CHOICE',
+        message: 'Selected card does not match the suggestion'
+      }, requestId));
+    }
+
+    // Reveal privately to suggester
+    sendToPlayer(game, pending.suggesterId, T.DISPROVE_RESULT, { 
+      disproverId: player.id,
+      cardId,
+      resolved: true
+    });
+
+    // Notify all players without revealing the card
+    broadcast(game, makeEnv(T.DISPROVE_RESULT, gameId, { 
+      disproverId: player.id,
+      resolved: true
+    }));
+
+    game.pendingSuggestion = null;
+    const { playerId: activeId, turnState } = ensureActiveTurn(game);
+    if (activeId) {
+      broadcastTurnState(game, activeId, turnState, 'SUGGESTION_REFUTED');
+    }
+    return;
+  }
+
+  // Player cannot disprove; move to next
+  pending.index += 1;
+
+  if (pending.index >= pending.order.length) {
+    concludeNoRefutation(game);
+    return;
+  }
+
+  promptNextDisprover(game);
 }
 
 function safe(ws, msg) { 

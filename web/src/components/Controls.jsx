@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const SUSPECTS = [
   "Miss Scarlet",
@@ -30,56 +30,87 @@ const ROOMS = [
   "Study",
 ];
 
-//board ajacency list - to help determine possible move directions, if needed
-const boardObj = {
-  Study: ["H1", "V1", "Kitchen"],
-  H1: ["Study", "Hall"],
-  Hall: ["H1", "H2", "V2"],
-  H2: ["Hall", "Lounge"],
-  Lounge: ["H2", "V3", "Conservatory"],
-  V1: ["Study", "Library"],
-  V2: ["Hall", "Billiard Room"],
-  V3: ["Lounge", "Dining Room"],
-  Library: ["V1", "H3", "V4"],
-  H3: ["Library", "Billiard Room"],
-  "Billiard Room": ["H3", "H4", "V2", "V5"],
-  H4: ["Billiard Room", "Dining Room"],
-  "Dining Room": ["V3", "V6", "H4"],
-  V4: ["Library", "Conservatory"],
-  V5: ["Billiard Room", "Ballroom"],
-  V6: ["Dining Room", "Kitchen"],
-  Conservatory: ["V4", "H5", "Lounge"],
-  H5: ["Conservatory", "Ballroom"],
-  Ballroom: ["H5", "H6", "V5"],
-  H6: ["Ballroom", "Kitchen"],
-  Kitchen: ["H6", "V6", "Study"],
+const SECRET_PASSAGES = {
+  Study: "Kitchen",
+  Kitchen: "Study",
+  Lounge: "Conservatory",
+  Conservatory: "Lounge",
+};
+
+const isHallway = (locationId) =>
+  typeof locationId === "string" &&
+  (locationId.startsWith("H") || locationId.startsWith("V"));
+
+const formatLocationLabel = (locationId) => {
+  if (!locationId) return "Unknown";
+  if (isHallway(locationId)) {
+    return `Hallway ${locationId}`;
+  }
+  return locationId;
 };
 
 const Controls = ({
   gameStarted,
   currentPlayer,
+  isMyTurn,
+  awaitingDisprove,
+  refutePrompt,
+  legalMoves,
+  hand,
+  accusationResult,
+  solutionRevealed,
   onMove,
   onSuggestion,
   onDisprove,
   onAccusation,
   onChat,
   onPing,
+  onEndTurn,
 }) => {
   const [showMoveForm, setShowMoveForm] = useState(false);
   const [showSuggestionForm, setShowSuggestionForm] = useState(false);
   const [showAccusationForm, setShowAccusationForm] = useState(false);
-  const [showDisproveForm, setShowDisproveForm] = useState(false);
   const [showChatForm, setShowChatForm] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
+
+  const currentRoom =
+    currentPlayer?.position?.zone === "ROOM" ? currentPlayer.position.id : null;
+  const legalMoveOptions = useMemo(
+    () => (Array.isArray(legalMoves) ? legalMoves : []),
+    [legalMoves]
+  );
+
+  const canAct =
+    gameStarted && isMyTurn && !awaitingDisprove && !currentPlayer?.eliminated;
+  const canMove = canAct && legalMoveOptions.length > 0;
+  const canSuggest = canAct && !!currentRoom;
+  const canAccuse = canAct && !accusationResult && !solutionRevealed;
+  const pendingDisproveForMe =
+    awaitingDisprove &&
+    refutePrompt &&
+    refutePrompt.nextPlayerId === currentPlayer?.id;
+
+  useEffect(() => {
+    if (!canMove) {
+      setShowMoveForm(false);
+    }
+    if (!canSuggest) {
+      setShowSuggestionForm(false);
+    }
+    if (!canAccuse) {
+      setShowAccusationForm(false);
+    }
+  }, [canMove, canSuggest, canAccuse]);
 
   const handleMove = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const to = formData.get("moveTo");
-    const targetId = formData.get("targetId");
-    const useSecretPassage = formData.get("useSecretPassage") === "on";
-
-    onMove(to, targetId, useSecretPassage);
+    const destinationId = formData.get("destinationId");
+    if (!destinationId) return;
+    const to = isHallway(destinationId) ? "HALLWAY" : "ROOM";
+    const useSecretPassage =
+      currentRoom && SECRET_PASSAGES[currentRoom] === destinationId;
+    onMove(to, destinationId, useSecretPassage);
     setShowMoveForm(false);
   };
 
@@ -88,7 +119,6 @@ const Controls = ({
     const formData = new FormData(e.target);
     const suspectId = formData.get("suspectId");
     const weaponId = formData.get("weaponId");
-
     onSuggestion(suspectId, weaponId);
     setShowSuggestionForm(false);
   };
@@ -99,7 +129,6 @@ const Controls = ({
     const suspectId = formData.get("suspectId");
     const weaponId = formData.get("weaponId");
     const roomId = formData.get("roomId");
-
     onAccusation(suspectId, weaponId, roomId);
     setShowAccusationForm(false);
   };
@@ -108,9 +137,7 @@ const Controls = ({
     e.preventDefault();
     const formData = new FormData(e.target);
     const cardId = formData.get("cardId");
-
     onDisprove(cardId || null);
-    setShowDisproveForm(false);
   };
 
   const handleChat = (e) => {
@@ -122,102 +149,138 @@ const Controls = ({
     }
   };
 
-  const handlePing = () => {
-    onPing();
+  const renderAwaitingBanner = () => {
+    if (!awaitingDisprove) return null;
+    if (pendingDisproveForMe) {
+      return (
+        <div className="banner warning">
+          You must choose a card to disprove the suggestion.
+        </div>
+      );
+    }
+    return (
+      <div className="banner info">
+        Waiting for another player to respond to the suggestion...
+      </div>
+    );
   };
+
+  const disproveCards = Array.isArray(hand) ? hand : [];
 
   return (
     <div className="controls">
       <h3>Game Controls</h3>
 
-      {/* Basic Controls */}
+      {renderAwaitingBanner()}
+
+      {!gameStarted && (
+        <div className="banner info">Game not started yet.</div>
+      )}
+
       <div className="basic-controls">
-        <button onClick={handlePing} className="control-btn ping-btn">
+        <button onClick={onPing} className="control-btn ping-btn">
           Ping Server
         </button>
 
         <button
           onClick={() => setShowChatForm(!showChatForm)}
-          className="control-btn chat-btn">
+          className="control-btn chat-btn"
+        >
           Send Chat
+        </button>
+
+        <button
+          onClick={onEndTurn}
+          className="control-btn end-turn-btn"
+          disabled={!canAct}
+          title={canAct ? "End your turn" : "Cannot end turn right now"}
+        >
+          End Turn
         </button>
       </div>
 
-      {/* Game Controls (only when game started) */}
       {gameStarted && (
         <div className="game-controls">
           <h4>Game Actions</h4>
 
           <button
             onClick={() => setShowMoveForm(!showMoveForm)}
-            className="control-btn move-btn">
+            className="control-btn move-btn"
+            disabled={!canMove}
+            title={
+              canMove
+                ? "Move to one of the legal destinations"
+                : "No legal moves available"
+            }
+          >
             Move
           </button>
 
           <button
             onClick={() => setShowSuggestionForm(!showSuggestionForm)}
-            className="control-btn suggestion-btn">
+            className="control-btn suggestion-btn"
+            disabled={!canSuggest}
+            title={
+              canSuggest
+                ? "Make a suggestion in this room"
+                : "You must be in a room on your turn to suggest"
+            }
+          >
             Make Suggestion
           </button>
 
           <button
-            onClick={() => setShowDisproveForm(!showDisproveForm)}
-            className="control-btn disprove-btn">
-            Respond to Suggestion
-          </button>
-
-          <button
             onClick={() => setShowAccusationForm(!showAccusationForm)}
-            className="control-btn accusation-btn">
+            className="control-btn accusation-btn"
+            disabled={!canAccuse}
+            title={
+              canAccuse
+                ? "Make an accusation"
+                : "You already acted or the game has ended"
+            }
+          >
             Make Accusation
           </button>
         </div>
       )}
 
-      {/* Move Form */}
       {showMoveForm && (
         <div className="control-form">
           <h4>Move Player</h4>
-          <form onSubmit={handleMove}>
-            <div className="form-group">
-              <label>Move to:</label>
-              <select name="moveTo" required>
-                //todo: move options based on gamestate plater location
-                {console.log(currentPlayer)}
-                <option value="">Select destination</option>
-                <option value="HALLWAY">Hallway</option>
-                <option value="ROOM">Room</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Target ID (room name or hallway):</label>
-              <input
-                type="text"
-                name="targetId"
-                placeholder="e.g., Kitchen, Hallway-1"
-              />
-            </div>
-            <div className="form-group">
-              <label>
-                <input type="checkbox" name="useSecretPassage" />
-                Use Secret Passage
-              </label>
-            </div>
-            <div className="form-actions">
-              <button type="submit">Move</button>
-              <button type="button" onClick={() => setShowMoveForm(false)}>
-                Cancel
-              </button>
-            </div>
-          </form>
+          {legalMoveOptions.length === 0 ? (
+            <p>No legal moves available.</p>
+          ) : (
+            <form onSubmit={handleMove}>
+              <div className="form-group">
+                <label>Legal destinations:</label>
+                <select name="destinationId" required>
+                  <option value="">Select destination</option>
+                  {legalMoveOptions.map((locationId) => (
+                    <option key={locationId} value={locationId}>
+                      {formatLocationLabel(locationId)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-actions">
+                <button type="submit">Move</button>
+                <button type="button" onClick={() => setShowMoveForm(false)}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       )}
 
-      {/* Suggestion Form */}
-      {showSuggestionForm && (
+      {showSuggestionForm && canSuggest && (
         <div className="control-form">
           <h4>Make Suggestion</h4>
           <form onSubmit={handleSuggestion}>
+            <div className="form-group">
+              <label>Current Room:</label>
+              <input type="text" value={currentRoom || "Unknown"} readOnly />
+            </div>
             <div className="form-group">
               <label>Suspect:</label>
               <select name="suspectId" required>
@@ -242,9 +305,7 @@ const Controls = ({
             </div>
             <div className="form-actions">
               <button type="submit">Make Suggestion</button>
-              <button
-                type="button"
-                onClick={() => setShowSuggestionForm(false)}>
+              <button type="button" onClick={() => setShowSuggestionForm(false)}>
                 Cancel
               </button>
             </div>
@@ -252,30 +313,28 @@ const Controls = ({
         </div>
       )}
 
-      {/* Disprove Form */}
-      {showDisproveForm && (
+      {pendingDisproveForMe && (
         <div className="control-form">
           <h4>Respond to Suggestion</h4>
           <form onSubmit={handleDisprove}>
             <div className="form-group">
-              <label>Card to show (optional):</label>
-              <input
-                type="text"
-                name="cardId"
-                placeholder="Enter card ID or leave empty to pass"
-              />
+              <label>Choose a card to show (optional):</label>
+              <select name="cardId">
+                <option value="">Pass (no matching card)</option>
+                {disproveCards.map((card) => (
+                  <option key={card} value={card}>
+                    {card}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="form-actions">
               <button type="submit">Respond</button>
-              <button type="button" onClick={() => setShowDisproveForm(false)}>
-                Cancel
-              </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Accusation Form */}
       {showAccusationForm && (
         <div className="control-form">
           <h4>Make Accusation</h4>
@@ -319,7 +378,8 @@ const Controls = ({
               </button>
               <button
                 type="button"
-                onClick={() => setShowAccusationForm(false)}>
+                onClick={() => setShowAccusationForm(false)}
+              >
                 Cancel
               </button>
             </div>
@@ -327,7 +387,18 @@ const Controls = ({
         </div>
       )}
 
-      {/* Chat Form */}
+      {accusationResult && (
+        <div
+          className={`banner ${
+            accusationResult.correct ? "success" : "warning"
+          }`}
+        >
+          {accusationResult.correct
+            ? "Your accusation was correct!"
+            : "Your accusation was incorrect."}
+        </div>
+      )}
+
       {showChatForm && (
         <div className="control-form">
           <h4>Send Chat Message</h4>
@@ -350,16 +421,6 @@ const Controls = ({
               </button>
             </div>
           </form>
-        </div>
-      )}
-
-      {/* Game Status */}
-      {!gameStarted && (
-        <div className="game-status">
-          <p>
-            Game not started yet. Wait for all players to join and select
-            characters.
-          </p>
         </div>
       )}
     </div>

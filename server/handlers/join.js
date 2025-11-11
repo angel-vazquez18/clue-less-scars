@@ -1,4 +1,4 @@
-const { ensureGame, createGame, addPlayer, publicPlayers } = require('../state/games');
+const { ensureGame, createGame, addPlayer, publicPlayers, getCurrentPlayer } = require('../state/games');
 const { makeEnv } = require('../schema/envelope');
 const { broadcast } = require('../utils/send');
 const T = require('../schema/types');
@@ -32,13 +32,19 @@ function handleJoin(ws, env) {
   safe(ws, makeEnv(T.GAME_STATE, gid, {
     board: game.board,
     players: publicPlayers(game),
-    you: { id: player.id, name: player.name, characterId: player.characterId },
-    turn: { currentPlayerId: game.turnOrder[game.turnIndex], phase: game.started ? 'move' : 'lobby', order: game.turnOrder }
+    you: { 
+      id: player.id, 
+      name: player.name, 
+      characterId: player.characterId,
+      isLeader: player.id === game.leaderId
+    },
+    turn: { currentPlayerId: getCurrentPlayer(game), phase: game.started ? 'move' : 'lobby', order: game.turnOrder },
+    leaderId: game.leaderId
   }, requestId));
 
   // broadcast join + lobby roster to all
   broadcast(game, makeEnv(T.PLAYER_JOINED, gid, { playerId: player.id, name: player.name, message: `Player "${player.name}" joined` }));
-  broadcast(game, makeEnv(T.LOBBY_STATE, gid, { players: publicPlayers(game) }));
+  broadcast(game, makeEnv(T.LOBBY_STATE, gid, { players: publicPlayers(game), leaderId: game.leaderId }));
 
   // tell the joining client what gid to reuse
   safe(ws, makeEnv(T.INFO, gid, { message: 'Joined game', gameId: gid }, requestId));
