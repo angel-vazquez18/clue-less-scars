@@ -30,6 +30,19 @@ const ROOMS = [
   "Study",
 ];
 
+const changeRefItemColor = (e) => {
+  const refItem = e.target;
+  if (refItem.style.backgroundColor === "rgb(255, 255, 255)") {
+    refItem.style.backgroundColor = "rgb(148, 21, 21)";
+    refItem.style.color = "rgb(255, 255, 255)";
+  } else if (refItem.style.backgroundColor === "rgb(148, 21, 21)") {
+    refItem.style.backgroundColor = "rgb(41, 159, 41)";
+  } else {
+    refItem.style.backgroundColor = "rgb(255, 255, 255)";
+    refItem.style.color = "rgba(4, 4, 4, 1)";
+  }
+};
+
 const stripPrefix = (value) =>
   typeof value === "string" ? value.replace(/^[^:]+:/, "") : value;
 
@@ -100,8 +113,7 @@ const InfoPanel = ({
       <div
         className={`banner ${
           accusationResult.correct ? "success" : "warning"
-        }`}
-      >
+        }`}>
         {accusationResult.correct
           ? "Your accusation was correct!"
           : "Your accusation was incorrect."}
@@ -152,13 +164,11 @@ const InfoPanel = ({
         </div>
         <div className="info-item">
           <strong>Legal Moves:</strong>{" "}
-          {gameState.turn?.legalMoves
-            ? gameState.turn.legalMoves.length
-            : 0}
+          {gameState.turn?.legalMoves ? gameState.turn.legalMoves.length : 0}
         </div>
         <div className="info-item">
-          <strong>Turn Order:</strong>{" "}
-          {gameState.turn?.order?.length || 0} players
+          <strong>Turn Order:</strong> {gameState.turn?.order?.length || 0}{" "}
+          players
         </div>
       </div>
     </div>
@@ -233,7 +243,10 @@ const InfoPanel = ({
           <h5>Suspects</h5>
           <div className="reference-list">
             {SUSPECTS.map((suspect) => (
-              <span key={suspect} className="reference-item">
+              <span
+                key={suspect}
+                className="reference-item"
+                onClick={changeRefItemColor}>
                 {suspect}
               </span>
             ))}
@@ -243,7 +256,10 @@ const InfoPanel = ({
           <h5>Weapons</h5>
           <div className="reference-list">
             {WEAPONS.map((weapon) => (
-              <span key={weapon} className="reference-item">
+              <span
+                key={weapon}
+                className="reference-item"
+                onClick={changeRefItemColor}>
                 {weapon}
               </span>
             ))}
@@ -253,7 +269,10 @@ const InfoPanel = ({
           <h5>Rooms</h5>
           <div className="reference-list">
             {ROOMS.map((room) => (
-              <span key={room} className="reference-item">
+              <span
+                key={room}
+                className="reference-item"
+                onClick={changeRefItemColor}>
                 {room}
               </span>
             ))}
@@ -278,4 +297,3 @@ const InfoPanel = ({
 };
 
 export default InfoPanel;
-

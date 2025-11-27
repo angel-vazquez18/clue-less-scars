@@ -39,6 +39,7 @@ const SECRET_PASSAGES = {
 
 const isHallway = (locationId) =>
   typeof locationId === "string" &&
+  locationId.includes("-") &&
   (locationId.startsWith("H") || locationId.startsWith("V"));
 
 const formatLocationLabel = (locationId) => {
@@ -173,9 +174,7 @@ const Controls = ({
 
       {renderAwaitingBanner()}
 
-      {!gameStarted && (
-        <div className="banner info">Game not started yet.</div>
-      )}
+      {!gameStarted && <div className="banner info">Game not started yet.</div>}
 
       <div className="basic-controls">
         <button onClick={onPing} className="control-btn ping-btn">
@@ -184,8 +183,7 @@ const Controls = ({
 
         <button
           onClick={() => setShowChatForm(!showChatForm)}
-          className="control-btn chat-btn"
-        >
+          className="control-btn chat-btn">
           Send Chat
         </button>
 
@@ -193,8 +191,7 @@ const Controls = ({
           onClick={onEndTurn}
           className="control-btn end-turn-btn"
           disabled={!canAct}
-          title={canAct ? "End your turn" : "Cannot end turn right now"}
-        >
+          title={canAct ? "End your turn" : "Cannot end turn right now"}>
           End Turn
         </button>
       </div>
@@ -211,8 +208,7 @@ const Controls = ({
               canMove
                 ? "Move to one of the legal destinations"
                 : "No legal moves available"
-            }
-          >
+            }>
             Move
           </button>
 
@@ -224,8 +220,7 @@ const Controls = ({
               canSuggest
                 ? "Make a suggestion in this room"
                 : "You must be in a room on your turn to suggest"
-            }
-          >
+            }>
             Make Suggestion
           </button>
 
@@ -237,8 +232,7 @@ const Controls = ({
               canAccuse
                 ? "Make an accusation"
                 : "You already acted or the game has ended"
-            }
-          >
+            }>
             Make Accusation
           </button>
         </div>
@@ -305,7 +299,9 @@ const Controls = ({
             </div>
             <div className="form-actions">
               <button type="submit">Make Suggestion</button>
-              <button type="button" onClick={() => setShowSuggestionForm(false)}>
+              <button
+                type="button"
+                onClick={() => setShowSuggestionForm(false)}>
                 Cancel
               </button>
             </div>
@@ -378,8 +374,7 @@ const Controls = ({
               </button>
               <button
                 type="button"
-                onClick={() => setShowAccusationForm(false)}
-              >
+                onClick={() => setShowAccusationForm(false)}>
                 Cancel
               </button>
             </div>
@@ -391,8 +386,7 @@ const Controls = ({
         <div
           className={`banner ${
             accusationResult.correct ? "success" : "warning"
-          }`}
-        >
+          }`}>
           {accusationResult.correct
             ? "Your accusation was correct!"
             : "Your accusation was incorrect."}

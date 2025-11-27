@@ -12,8 +12,8 @@
   --cl-cell-gap: clamp(0.2rem, 0.6vw, 0.4rem);
   --cl-wall-thickness: clamp(0.24rem, 0.5vw, 0.38rem);
   --cl-board-max-size: min(92vmin, 1200px);
-  --cl-columns: 19;
-  --cl-rows: 19;
+  --cl-columns: 14;
+  --cl-rows: 14;
 }
 
 .cl-board-tabletop {
@@ -51,9 +51,14 @@
   gap: var(--cl-cell-gap);
   padding: var(--cl-cell-gap);
   border-radius: 1.2rem;
-  background:
-    linear-gradient(90deg, rgba(32, 23, 14, 0.12) 1px, transparent 1px) 0 0 / calc(100% / var(--cl-columns, 19)) calc(100% / var(--cl-rows, 19)),
-    linear-gradient(0deg, rgba(32, 23, 14, 0.12) 1px, transparent 1px) 0 0 / calc(100% / var(--cl-columns, 19)) calc(100% / var(--cl-rows, 19)),
+  background: linear-gradient(
+        90deg,
+        rgba(32, 23, 14, 0.12) 1px,
+        transparent 1px
+      )
+      0 0 / calc(100% / var(--cl-columns, 14)) calc(100% / var(--cl-rows, 14)),
+    linear-gradient(0deg, rgba(32, 23, 14, 0.12) 1px, transparent 1px) 0 0 /
+      calc(100% / var(--cl-columns, 14)) calc(100% / var(--cl-rows, 14)),
     #efe3d0;
   border: clamp(0.35rem, 0.8vw, 0.55rem) solid #201711;
   box-shadow: inset 0 0 45px rgba(0, 0, 0, 0.28);
@@ -83,7 +88,12 @@
 
 .cl-cell-room {
   border: var(--cl-wall-thickness) solid var(--cl-wall-color);
-  background: linear-gradient(140deg, var(--cl-room-fill-1) 0%, var(--cl-room-fill-2) 60%, #c7ad81 100%);
+  background: linear-gradient(
+    140deg,
+    var(--cl-room-fill-1) 0%,
+    var(--cl-room-fill-2) 60%,
+    #c7ad81 100%
+  );
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.27);
 }
 
@@ -102,7 +112,12 @@
 
 .cl-cell-hallway {
   border: clamp(0.1rem, 0.18vw, 0.18rem) solid var(--cl-hallway-edge);
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.2) 0%, rgba(0, 0, 0, 0.12) 50%, rgba(255, 255, 255, 0.22) 100%),
+  background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.2) 0%,
+      rgba(0, 0, 0, 0.12) 50%,
+      rgba(255, 255, 255, 0.22) 100%
+    ),
     var(--cl-hallway-fill);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.3);
 }
@@ -124,8 +139,11 @@
 
 .cl-cell-void {
   border: 1px dashed rgba(255, 255, 255, 0.08);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.06) 0%, rgba(0, 0, 0, 0.08) 100%),
+  background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.06) 0%,
+      rgba(0, 0, 0, 0.08) 100%
+    ),
     var(--cl-void-fill);
   opacity: 0.7;
 }
@@ -181,7 +199,12 @@
   width: clamp(1.3rem, 2vw, 1.75rem);
   height: clamp(1.3rem, 2vw, 1.75rem);
   border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #fff6d6 0%, var(--cl-secret-fill) 55%, var(--cl-secret-edge) 100%);
+  background: radial-gradient(
+    circle at 30% 30%,
+    #fff6d6 0%,
+    var(--cl-secret-fill) 55%,
+    var(--cl-secret-edge) 100%
+  );
   color: #51370f;
   font-size: clamp(0.55rem, 0.9vw, 0.75rem);
   font-weight: 700;
