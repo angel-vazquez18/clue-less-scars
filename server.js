@@ -581,6 +581,7 @@ function processMakeAccusation(game, player, payload, requestId) {
 		}, requestId));
   	}
 	const { suspectId, weaponId, roomId } = payload || {};
+	broadcastGame(game.gameId, 'ACCUSED', { by: player.id, suspectId, weaponId, roomId });
 	const correct =
 		game.solution.suspectId === suspectId &&
 		game.solution.weaponId === weaponId &&
