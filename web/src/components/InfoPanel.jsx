@@ -46,19 +46,16 @@ const changeRefItemColor = (e) => {
 const stripPrefix = (value) =>
   typeof value === "string" ? value.replace(/^[^:]+:/, "") : value;
 
-const formatPosition = (position, gameStarted) => {
-  if (!position) {
-    return gameStarted ? "Not placed" : "Lobby";
-  }
-  if (typeof position === "string") {
-    return position;
-  }
-  const { zone, id, secret } = position;
-  const parts = [];
-  if (id) parts.push(id);
-  else if (zone) parts.push(zone);
-  if (secret) parts.push("(Secret Passage)");
-  return parts.length > 0 ? parts.join(" ") : "Unknown";
+const formatPosition = (currentPlayer, gameStarted, gameState) => {
+  if (!gameStarted) return "Lobby";
+  const position = gameState.players.map((player) => {
+    if (player.position === null) return "Not Placed";
+    if (player.id === currentPlayer.id && player.position.zone) {
+      console.log("player: ", player);
+      return `${player.position.zone} ${player.position.id}`;
+    }
+  });
+  return position;
 };
 
 const InfoPanel = ({
@@ -84,6 +81,19 @@ const InfoPanel = ({
   const suggestion = gameState.pendingSuggestion || refutePrompt || null;
   const awaitingMe =
     awaitingDisprove && suggestion?.nextPlayerId === currentPlayer?.id;
+
+  // const infoPosition = (player) => {
+  //   gameState.players.map((player) => {
+  //     if (
+  //       player.id === currentTurnPlayerId &&
+  //       player.position.zone === "ROOM"
+  //     ) {
+  //       console.log(player.position.id, "<- player position id");
+  //       return player.position.id;
+  //     }
+  //     return "Hallway";
+  //   });
+  // };
 
   const renderTurnBanner = () => {
     if (!gameStarted) return null;
@@ -193,7 +203,9 @@ const InfoPanel = ({
           </div>
           <div>
             <strong>Position:</strong>{" "}
-            {formatPosition(currentPlayer.position, gameStarted)}
+            {console.log("currentPlayer: ", currentPlayer)}
+            {console.log("gameState: ", gameState)}
+            {formatPosition(currentPlayer, gameStarted, gameState)}
           </div>
         </div>
       </div>
