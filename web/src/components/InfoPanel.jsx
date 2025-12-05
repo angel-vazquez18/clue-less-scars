@@ -51,7 +51,6 @@ const formatPosition = (currentPlayer, gameStarted, gameState) => {
   const position = gameState.players.map((player) => {
     if (player.position === null) return "Not Placed";
     if (player.id === currentPlayer.id && player.position.zone) {
-      console.log("player: ", player);
       return `${player.position.zone} ${player.position.id}`;
     }
   });
@@ -81,19 +80,6 @@ const InfoPanel = ({
   const suggestion = gameState.pendingSuggestion || refutePrompt || null;
   const awaitingMe =
     awaitingDisprove && suggestion?.nextPlayerId === currentPlayer?.id;
-
-  // const infoPosition = (player) => {
-  //   gameState.players.map((player) => {
-  //     if (
-  //       player.id === currentTurnPlayerId &&
-  //       player.position.zone === "ROOM"
-  //     ) {
-  //       console.log(player.position.id, "<- player position id");
-  //       return player.position.id;
-  //     }
-  //     return "Hallway";
-  //   });
-  // };
 
   const renderTurnBanner = () => {
     if (!gameStarted) return null;
@@ -203,8 +189,6 @@ const InfoPanel = ({
           </div>
           <div>
             <strong>Position:</strong>{" "}
-            {console.log("currentPlayer: ", currentPlayer)}
-            {console.log("gameState: ", gameState)}
             {formatPosition(currentPlayer, gameStarted, gameState)}
           </div>
         </div>
