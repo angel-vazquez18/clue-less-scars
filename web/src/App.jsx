@@ -216,38 +216,43 @@ function App() {
           break;
         }
           
-        case 'PLAYER_MOVED':
-          addMessage(`Player moved to ${message.payload.to.zone} ${message.payload.to.id || ''}`.trim(), 'player-action');
-          if (message.payload.playerId) {
+        case 'PLAYER_MOVED': {
+          const { playerId, to, movesRemaining, movementAllowance, legalMoves } = message.payload;
+          addMessage(
+            `Player moved to ${to.zone} ${to.id || ''}`.trim(),
+            'player-action'
+          );
+          if (playerId) {
             setGameState(prev => {
               if (!prev) return prev;
               return {
                 ...prev,
                 players: prev.players.map(p =>
-                  p.id === message.payload.playerId
-                    ? { ...p, position: message.payload.to }
-                    : p
+                  p.id === playerId ? { ...p, position: to } : p
                 ),
                 turn: {
                   ...prev.turn,
-                  movesRemaining: message.payload.movesRemaining ?? prev.turn?.movesRemaining ?? null,
+                  movesRemaining: movesRemaining ?? prev.turn?.movesRemaining ?? null,
                   movementAllowance:
-                    message.payload.movementAllowance ?? prev.turn?.movementAllowance ?? null,
-                  legalMoves: Array.isArray(message.payload.legalMoves)
-                    ? message.payload.legalMoves
-                    : prev.turn?.legalMoves || []
+                    movementAllowance ?? prev.turn?.movementAllowance ?? null,
+                  legalMoves:
+                    Array.isArray(legalMoves) && legalMoves.length > 0
+                      ? legalMoves
+                      : prev.turn?.legalMoves || []
                 }
               };
             });
             setPlayers(prev =>
               prev.map(p =>
-                p.id === message.payload.playerId
-                  ? { ...p, position: message.payload.to }
-                  : p
+                p.id === playerId ? { ...p, position: to } : p
               )
+            );
+            setCurrentPlayer(prev =>
+              prev && prev.id === playerId ? { ...prev, position: to } : prev
             );
           }
           break;
+        }
           
         case 'SUGGESTION_MADE': {
           const { suspectId, weaponId, by } = message.payload;
