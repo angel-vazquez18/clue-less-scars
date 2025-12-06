@@ -158,6 +158,8 @@ async function handleMessage(ws, env) {
 			return processPing(ws, gameId, payload, requestId);
 		case 'END_TURN':
   			return processEndTurn(game, player, requestId);
+		case 'RECCONNECT':
+			return processReconnect(ws, game, payload, requestId);
 		default:
 			console.warn(`[${gameId}] Unknown message type from player ${player?.name || 'unknown'}: ${type}`);
 			sendWs(ws, makeEnv('ERROR', gameId, { 
@@ -581,6 +583,7 @@ function processMakeAccusation(game, player, payload, requestId) {
 		}, requestId));
   	}
 	const { suspectId, weaponId, roomId } = payload || {};
+	broadcastGame(game.gameId, 'ACCUSED', { by: player.id, suspectId, weaponId, roomId });
 	const correct =
 		game.solution.suspectId === suspectId &&
 		game.solution.weaponId === weaponId &&
@@ -637,19 +640,58 @@ function processEndTurn(game, player, requestId) {
   	}
   	advanceTurn(game);
 }
+function processReconnect(ws, game, payload, requestId) {
+	const { playerId } = payload || {};
+	if (!playerId) {
+		return sendWs(ws, makeEnv('ERROR', game.gameId, {
+			code: 'MISSING_PLAYER_ID', message: 'playerId required to reconnect'
+		}, requestId));
+	}
 
-	
-// Helper senders
+	const player = game.players[playerId];
+	if (!player) {
+		return sendWs(ws, makeEnv('ERROR', game.gameId, {
+			code: 'PLAYER_NOT_FOUND', message: 'No such player in this game'
+		}, requestId));
+	}
 
-function sendError(ws, code, message, gameId = null, requestId = null) {
-	const env =  makeEnv('ERROR', gameId, { code, message }, requestId);
-	if (ws) sendWs(ws, env);
+	// reattach ws
+	player.ws = ws;
+	console.log(`[${game.gameId}] Player reconnected: ${player.name} (${player.id})`);
+
+	// send them their current hand and game state snapshot
+	sendWs(ws, makeEnv('YOUR_HAND', game.gameId, { cards: player.hand }, requestId));
+	sendWs(ws, makeEnv('GAME_STATE', game.gameId, {
+		board: game.board,
+		players: Object.values(game.players).map(p => ({
+			id: p.id, name: p.name, characterId: p.characterId
+		})),
+		you: { playerId: player.id, name: player.name, characterId: player.characterId },
+		turn: game.turnOrder[game.turnIndex],
+	}, requestId));
+
+	// If it's currently their turn, remind them & include legal actions
+	const currentId = getCurrentPlayerId(game);
+	if (currentId === player.id) {
+		const legal = computeLegalActions(game, player.id);
+		sendWs(ws, makeEnv('TURN_START', game.gameId, {
+			playerId: player.id, legal
+		}, requestId));
+	}
 }
 
-function sendToPlayer(game, playerId, type, payload = {}, requestId = null) {
-	const p = game.players[playerId];
-	if (!p || !p.ws) return;
-	sendWs(p.ws,  makeEnv(type, game.gameId, payload, requestId));
+		
+	// Helper senders
+
+	function sendError(ws, code, message, gameId = null, requestId = null) {
+		const env =  makeEnv('ERROR', gameId, { code, message }, requestId);
+		if (ws) sendWs(ws, env);
+	}
+
+	function sendToPlayer(game, playerId, type, payload = {}, requestId = null) {
+		const p = game.players[playerId];
+		if (!p || !p.ws) return;
+		sendWs(p.ws,  makeEnv(type, game.gameId, payload, requestId));
 }
 
 function computeDisproveOrder(game, fromPlayerId) {
@@ -766,7 +808,19 @@ const wss = new WebSocket.Server({ port: PORT }, () => {
 	console.log(`WebSocket server listening on ws://localhost:${PORT}`);
 	});
 
+const HEARTBEAT_INTERVAL_MS = 30_000;
+
+function heartbeat() {
+  this.isAlive = true;
+}
+
 wss.on('connection', (ws, req) => {
+	// mark as alive on connect
+  	ws.isAlive = true;
+
+  	// whenever get a pong, mark the connection as alive again
+  	ws.on('pong', heartbeat);
+
 	// On new WS connection, expect client to send JOIN_GAME envelope soon.
 	ws.on('message', async (data) => {
 		let envelope;
@@ -784,10 +838,6 @@ wss.on('connection', (ws, req) => {
 		for (const g of Object.values(games)) {
 			for (const pId in g.players) {
 				const p = g.players[pId];
-				if (g.started && g.turnOrder[g.turnIndex] === pId) {
-					console.log(`[TURN] ${p.name} disconnected during their turn — skipping to next player`);
-					advanceTurn(g);
-				}
 				if (p.ws === ws) {
 					p.ws = null;
 					console.log(`[${g.gameId}] Player disconnected: ${p.name} (${p.id})`);
@@ -796,6 +846,23 @@ wss.on('connection', (ws, req) => {
 			}
 		}
 	});
+});
+
+// periodic ping to all clients
+const heartbeatInterval = setInterval(() => {
+	wss.clients.forEach((ws) => {
+		if (ws.isAlive === false) {
+			console.log('[WS] Terminating dead connection');
+			return ws.terminate();
+		}
+		ws.isAlive = false;
+		ws.ping();   // will trigger 'pong' on the client if alive
+  	});
+}, HEARTBEAT_INTERVAL_MS);
+
+//  clean up on process exit
+wss.on('close', () => {
+  clearInterval(heartbeatInterval);
 });
 
 // HTTP Server Setup
