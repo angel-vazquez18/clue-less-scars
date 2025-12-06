@@ -1,25 +1,50 @@
-const { v4: uuidv4 } = require('uuid');
+const { v4: uuidv4 } = require("uuid");
 
-const BOARD_CONFIG = require('../data/boardConfig.json');
+const BOARD_CONFIG = require("../data/boardConfig.json");
 
 // ---- Minimal dealing & envelope (Clue-Less) ----
-const SUSPECTS = ['mustard','plum','scarlet','peacock','green','white'];
-const WEAPONS  = ['knife','candlestick','revolver','rope','leadpipe','wrench'];
-const ROOMS    = ['kitchen','ballroom','conservatory','dining','billiard','library','lounge','hall','study'];
+const SUSPECTS = [
+  "Colonel Mustard",
+  "Professor Plum",
+  "Miss Scarlet",
+  "Mrs. Peacock",
+  "Mr. Green",
+  "Mrs. White",
+];
+const WEAPONS = [
+  "Knife",
+  "Candlestick",
+  "Revolver",
+  "Rope",
+  "Leadpipe",
+  "Wrench",
+];
+const ROOMS = [
+  "Kitchen",
+  "Ballroom",
+  "Conservatory",
+  "Dining Room",
+  "Billiard Room",
+  "Library",
+  "Lounge",
+  "Hall",
+  "Study",
+];
 
 const DEFAULT_MOVES_PER_TURN = 4;
 
 function inferZoneForLocation(locationId) {
   if (!locationId) return null;
-  return (locationId.startsWith('H') || locationId.startsWith('V')) ? 'HALLWAY' : 'ROOM';
+  return locationId.startsWith("H") || locationId.startsWith("V")
+    ? "HALLWAY"
+    : "ROOM";
 }
 
 const STARTING_POSITIONS = Object.freeze(
   Object.fromEntries(
-    Object.entries(BOARD_CONFIG.startingPositions || {}).map(([character, positionId]) => [
-      character,
-      { id: positionId }
-    ])
+    Object.entries(BOARD_CONFIG.startingPositions || {}).map(
+      ([character, positionId]) => [character, { id: positionId }]
+    )
   )
 );
 
@@ -45,7 +70,7 @@ function buildBoardGraphFromConfig(config) {
   const rows = config.gridSize?.rows ?? 0;
   const grid = Array.from({ length: rows }, () => Array(columns).fill(null));
 
-  (config.cells || []).forEach(cell => {
+  (config.cells || []).forEach((cell) => {
     const width = cell.width ?? 1;
     const height = cell.height ?? 1;
     for (let dy = 0; dy < height; dy += 1) {
@@ -77,7 +102,7 @@ function buildBoardGraphFromConfig(config) {
         [x, y - 1],
         [x + 1, y],
         [x, y + 1],
-        [x - 1, y]
+        [x - 1, y],
       ];
       neighbors.forEach(([nx, ny]) => {
         const neighborId = grid[ny]?.[nx];
@@ -86,11 +111,11 @@ function buildBoardGraphFromConfig(config) {
         const zoneB = inferZoneForLocation(neighborId);
 
         let connect = false;
-        if (zoneA === 'HALLWAY' && zoneB === 'HALLWAY') {
+        if (zoneA === "HALLWAY" && zoneB === "HALLWAY") {
           connect = true;
-        } else if (zoneA === 'ROOM' && zoneB === 'HALLWAY') {
+        } else if (zoneA === "ROOM" && zoneB === "HALLWAY") {
           connect = allowDoor(id, neighborId);
-        } else if (zoneA === 'HALLWAY' && zoneB === 'ROOM') {
+        } else if (zoneA === "HALLWAY" && zoneB === "ROOM") {
           connect = allowDoor(neighborId, id);
         }
 
@@ -109,8 +134,8 @@ function buildBoardGraphFromConfig(config) {
     }
   });
 
-  const allIds = new Set((config.cells || []).map(cell => cell.id));
-  allIds.forEach(id => {
+  const allIds = new Set((config.cells || []).map((cell) => cell.id));
+  allIds.forEach((id) => {
     if (!adjacency.has(id)) {
       adjacency.set(id, new Set());
     }
@@ -118,7 +143,10 @@ function buildBoardGraphFromConfig(config) {
 
   return Object.freeze(
     Object.fromEntries(
-      Array.from(adjacency.entries(), ([key, set]) => [key, Object.freeze(Array.from(set))])
+      Array.from(adjacency.entries(), ([key, set]) => [
+        key,
+        Object.freeze(Array.from(set)),
+      ])
     )
   );
 }
@@ -131,12 +159,12 @@ function initialBoardState() {
     startingPositions: Object.fromEntries(
       Object.entries(STARTING_POSITIONS).map(([character, pos]) => [
         character,
-        { id: pos.id, zone: inferZoneForLocation(pos.id), secret: false }
+        { id: pos.id, zone: inferZoneForLocation(pos.id), secret: false },
       ])
     ),
     suspectTokens: {},
     weaponTokens: {},
-    config: BOARD_CONFIG
+    config: BOARD_CONFIG,
   };
 }
 
@@ -174,19 +202,27 @@ function computeLegalMoves(game, playerId, turnState) {
   if (maxSteps <= 0) return [];
 
   const occupiedHallways = new Set();
-  Object.values(game.players).forEach(other => {
+  Object.values(game.players).forEach((other) => {
     if (!other || other.id === playerId) return;
     const locId = other.position?.id;
     if (!locId) return;
     const zone = inferZoneForLocation(locId);
-    if (zone === 'HALLWAY') {
+    if (zone === "HALLWAY") {
       occupiedHallways.add(locId);
     }
   });
 
   const results = new Set();
-  const queue = [{ id: startId, stepsLeft: maxSteps, secretUsed: !!turnState.secretPassageUsed }];
-  const visited = new Set([`${startId}:${turnState.secretPassageUsed ? 1 : 0}:${maxSteps}`]);
+  const queue = [
+    {
+      id: startId,
+      stepsLeft: maxSteps,
+      secretUsed: !!turnState.secretPassageUsed,
+    },
+  ];
+  const visited = new Set([
+    `${startId}:${turnState.secretPassageUsed ? 1 : 0}:${maxSteps}`,
+  ]);
 
   while (queue.length > 0) {
     const { id, stepsLeft, secretUsed } = queue.shift();
@@ -199,7 +235,7 @@ function computeLegalMoves(game, playerId, turnState) {
       if (stepsLeft < cost) continue;
       const zone = inferZoneForLocation(next);
       if (!zone) continue;
-      if (zone === 'HALLWAY' && occupiedHallways.has(next)) continue;
+      if (zone === "HALLWAY" && occupiedHallways.has(next)) continue;
       const nextStepsLeft = stepsLeft - cost;
       const nextSecretUsed = secretUsed || isSecret;
       const visitKey = `${next}:${nextSecretUsed ? 1 : 0}:${nextStepsLeft}`;
@@ -207,9 +243,13 @@ function computeLegalMoves(game, playerId, turnState) {
       visited.add(visitKey);
       if (next !== startId) results.add(next);
 
-      const enteringRoom = zone === 'ROOM';
+      const enteringRoom = zone === "ROOM";
       if (!enteringRoom && nextStepsLeft > 0) {
-        queue.push({ id: next, stepsLeft: nextStepsLeft, secretUsed: nextSecretUsed });
+        queue.push({
+          id: next,
+          stepsLeft: nextStepsLeft,
+          secretUsed: nextSecretUsed,
+        });
       }
     }
   }
@@ -222,30 +262,36 @@ function updateLegalMoves(game) {
     if (game.turnState) game.turnState.legalMoves = [];
     return [];
   }
-  const legal = computeLegalMoves(game, game.turnState.playerId, game.turnState);
+  const legal = computeLegalMoves(
+    game,
+    game.turnState.playerId,
+    game.turnState
+  );
   game.turnState.legalMoves = legal;
   return legal;
 }
 
 function makeEnvelopeAndDeal(game) {
   const suspectPool = shuffle(SUSPECTS).slice();
-  const weaponPool  = shuffle(WEAPONS).slice();
-  const roomPool    = shuffle(ROOMS).slice();
+  const weaponPool = shuffle(WEAPONS).slice();
+  const roomPool = shuffle(ROOMS).slice();
 
   const solution = {
     suspectId: `suspect:${suspectPool.pop()}`,
-    weaponId:  `weapon:${weaponPool.pop()}`,
-    roomId:    `room:${roomPool.pop()}`
+    weaponId: `weapon:${weaponPool.pop()}`,
+    roomId: `room:${roomPool.pop()}`,
   };
 
   const remainingCards = shuffle([
-    ...suspectPool.map(s => `suspect:${s}`),
-    ...weaponPool.map(w => `weapon:${w}`),
-    ...roomPool.map(r => `room:${r}`)
+    ...suspectPool.map((s) => `suspect:${s}`),
+    ...weaponPool.map((w) => `weapon:${w}`),
+    ...roomPool.map((r) => `room:${r}`),
   ]);
 
   const playerIds = Object.keys(game.players);
-  playerIds.forEach(pid => { game.players[pid].hand = []; });
+  playerIds.forEach((pid) => {
+    game.players[pid].hand = [];
+  });
 
   remainingCards.forEach((cardId, idx) => {
     const pid = playerIds[idx % playerIds.length];
@@ -256,15 +302,14 @@ function makeEnvelopeAndDeal(game) {
   game.dealt = true;
 }
 
-
 const games = Object.create(null); // gid -> { gameId, players:{pid:{...}}, turnOrder:[], started:false, board, solution, turnIndex }
 
 function ensureGame(gameId) {
   if (!games[gameId]) {
-    games[gameId] = { 
-      gameId, 
-      players: {}, 
-      turnOrder: [], 
+    games[gameId] = {
+      gameId,
+      players: {},
+      turnOrder: [],
       started: false,
       board: initialBoardState(),
       solution: null,
@@ -275,7 +320,7 @@ function ensureGame(gameId) {
       pendingSuggestion: null,
       ended: false,
       winnerId: null,
-      currentPlayerId: null
+      currentPlayerId: null,
     };
   }
   return games[gameId];
@@ -283,10 +328,10 @@ function ensureGame(gameId) {
 
 function createGame() {
   const gid = uuidv4();
-  games[gid] = { 
-    gameId: gid, 
-    players: {}, 
-    turnOrder: [], 
+  games[gid] = {
+    gameId: gid,
+    players: {},
+    turnOrder: [],
     started: false,
     board: initialBoardState(),
     solution: null,
@@ -297,21 +342,21 @@ function createGame() {
     pendingSuggestion: null,
     ended: false,
     winnerId: null,
-    currentPlayerId: null
+    currentPlayerId: null,
   };
   return games[gid];
 }
 
 function addPlayer(game, name, ws) {
   const pid = uuidv4();
-  const player = { 
-    id: pid, 
-    name, 
-    ws, 
-    characterId: null, 
-    hand: [], 
+  const player = {
+    id: pid,
+    name,
+    ws,
+    characterId: null,
+    hand: [],
     position: null,
-    eliminated: false
+    eliminated: false,
   };
   game.players[pid] = player;
   game.turnOrder.push(pid);
@@ -325,19 +370,19 @@ function addPlayer(game, name, ws) {
 }
 
 function publicPlayers(game) {
-  return Object.values(game.players).map(p => ({
-    id: p.id, 
-    name: p.name, 
+  return Object.values(game.players).map((p) => ({
+    id: p.id,
+    name: p.name,
     characterId: p.characterId || null,
     position: p.position || null,
     isLeader: game.leaderId === p.id,
-    eliminated: !!p.eliminated
+    eliminated: !!p.eliminated,
   }));
 }
 
 function resolveGameAndPlayer(ws, gameId) {
   const game = games[gameId];
-  const player = (ws && ws.playerId && game) ? game.players[ws.playerId] : null;
+  const player = ws && ws.playerId && game ? game.players[ws.playerId] : null;
   return { game, player };
 }
 
@@ -359,7 +404,7 @@ function ensureTurnMoveState(game) {
       movementAllowance: DEFAULT_MOVES_PER_TURN,
       movesRemaining: DEFAULT_MOVES_PER_TURN,
       secretPassageUsed: false,
-      legalMoves: []
+      legalMoves: [],
     };
   }
 
@@ -368,7 +413,7 @@ function ensureTurnMoveState(game) {
 }
 
 function assignStartingPositions(game) {
-  Object.values(game.players).forEach(player => {
+  Object.values(game.players).forEach((player) => {
     const config = STARTING_POSITIONS[player.characterId];
     if (config) {
       const zone = inferZoneForLocation(config.id);
@@ -418,7 +463,7 @@ function ensureActivePlayer(game) {
     }
   }
 
-  let idx = typeof game.turnIndex === 'number' ? game.turnIndex : -1;
+  let idx = typeof game.turnIndex === "number" ? game.turnIndex : -1;
   const len = game.turnOrder.length;
   let attempts = 0;
   while (attempts < len) {
@@ -448,7 +493,7 @@ function nextTurn(game) {
     return null;
   }
 
-  let idx = typeof game.turnIndex === 'number' ? game.turnIndex : -1;
+  let idx = typeof game.turnIndex === "number" ? game.turnIndex : -1;
   const len = game.turnOrder.length;
   let attempts = 0;
   while (attempts < len) {
@@ -524,7 +569,7 @@ function markPlayerEliminated(game, playerId) {
 
 function getActivePlayerIds(game) {
   if (!game) return [];
-  return game.turnOrder.filter(pid => {
+  return game.turnOrder.filter((pid) => {
     const player = game.players[pid];
     return player && !player.eliminated;
   });
@@ -553,20 +598,24 @@ function advanceTurn(game) {
 function evaluateGameStatus(game) {
   const activeIds = getActivePlayerIds(game);
   if (activeIds.length === 0) {
-    return { ended: true, winnerId: null, reason: 'NO_ACTIVE_PLAYERS' };
+    return { ended: true, winnerId: null, reason: "NO_ACTIVE_PLAYERS" };
   }
   if (activeIds.length === 1) {
-    return { ended: true, winnerId: activeIds[0], reason: 'LAST_PLAYER_REMAINING' };
+    return {
+      ended: true,
+      winnerId: activeIds[0],
+      reason: "LAST_PLAYER_REMAINING",
+    };
   }
   return { ended: false, winnerId: null, reason: null };
 }
 
-module.exports = { 
-  games, 
-  ensureGame, 
-  createGame, 
-  addPlayer, 
-  publicPlayers, 
+module.exports = {
+  games,
+  ensureGame,
+  createGame,
+  addPlayer,
+  publicPlayers,
   resolveGameAndPlayer,
   startGame,
   getCurrentPlayer,
@@ -586,5 +635,5 @@ module.exports = {
   ensureActiveTurn,
   advanceTurn,
   evaluateGameStatus,
-  updateLegalMoves
+  updateLegalMoves,
 };
