@@ -63,31 +63,55 @@ const createBoardLayout = () => {
   };
 
   // Rooms
-  fillRegion(0, 0, 5, 5, { id: "Study", type: "room", label: "Study", secret: true });
+  fillRegion(0, 0, 5, 5, {
+    id: "Study",
+    type: "room",
+    label: "Study",
+    secret: true,
+  });
   fillRegion(0, 6, 5, 3, { id: "Hall", type: "room", label: "Hall" });
-  fillRegion(0, 10, 5, 5, { id: "Lounge", type: "room", label: "Lounge", secret: true });
+  fillRegion(0, 10, 5, 5, {
+    id: "Lounge",
+    type: "room",
+    label: "Lounge",
+    secret: true,
+  });
   fillRegion(6, 0, 5, 5, { id: "Library", type: "room", label: "Library" });
-  fillRegion(6, 6, 5, 3, { id: "Billiard Room", type: "room", label: "Billiard" });
+  fillRegion(6, 6, 5, 3, {
+    id: "Billiard Room",
+    type: "room",
+    label: "Billiard",
+  });
   fillRegion(6, 10, 5, 5, { id: "Dining Room", type: "room", label: "Dining" });
-  fillRegion(11, 0, 4, 5, { id: "Conservatory", type: "room", label: "Conservatory", secret: true });
+  fillRegion(11, 0, 4, 5, {
+    id: "Conservatory",
+    type: "room",
+    label: "Conservatory",
+    secret: true,
+  });
   fillRegion(11, 6, 4, 3, { id: "Ballroom", type: "room", label: "Ballroom" });
-  fillRegion(11, 10, 4, 5, { id: "Kitchen", type: "room", label: "Kitchen", secret: true });
+  fillRegion(11, 10, 4, 5, {
+    id: "Kitchen",
+    type: "room",
+    label: "Kitchen",
+    secret: true,
+  });
 
   // Hallways (H1-H6 horizontal connectors)
-  fillWalkway(0, 5, 5, 1, "H1", "H1");
-  fillWalkway(0, 9, 5, 1, "H2", "H2");
-  fillWalkway(6, 5, 5, 1, "H3", "H3");
-  fillWalkway(6, 9, 5, 1, "H4", "H4");
-  fillWalkway(11, 5, 4, 1, "H5", "H5");
-  fillWalkway(11, 9, 4, 1, "H6", "H6");
+  fillWalkway(0, 5, 1, 2, "H1", "H1");
+  fillWalkway(0, 9, 1, 2, "H2", "H2");
+  fillWalkway(6, 5, 1, 2, "H3", "H3");
+  fillWalkway(6, 9, 1, 2, "H4", "H4");
+  fillWalkway(11, 5, 1, 2, "H5", "H5");
+  fillWalkway(11, 9, 1, 2, "H6", "H6");
 
   // Hallways (V1-V6 vertical connectors)
-  fillWalkway(5, 0, 1, 5, "V1", "V1");
-  fillWalkway(5, 6, 1, 3, "V2", "V2");
-  fillWalkway(5, 10, 1, 5, "V3", "V3");
-  fillWalkway(10, 0, 1, 5, "V4", "V4");
-  fillWalkway(10, 6, 1, 3, "V5", "V5");
-  fillWalkway(10, 10, 1, 5, "V6", "V6");
+  fillWalkway(5, 0, 2, 1, "V1", "V1");
+  fillWalkway(5, 6, 2, 1, "V2", "V2");
+  fillWalkway(5, 10, 2, 1, "V3", "V3");
+  fillWalkway(10, 0, 2, 1, "V4", "V4");
+  fillWalkway(10, 6, 2, 1, "V5", "V5");
+  fillWalkway(10, 10, 2, 1, "V6", "V6");
 
   return layout;
 };
@@ -141,8 +165,7 @@ const BoardGrid = ({ startingPositions, gameState }) => {
         style={{
           gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(32px, 1fr))`,
           gridTemplateRows: `repeat(${BOARD_SIZE}, minmax(32px, 1fr))`,
-        }}
-      >
+        }}>
         {BOARD_LAYOUT.map((row, rowIndex) =>
           row.map((cell, colIndex) => {
             if (!cell || cell.type === "void") {
@@ -171,12 +194,13 @@ const BoardGrid = ({ startingPositions, gameState }) => {
                       : cell.type === "hallway"
                       ? "rgba(214, 188, 150, 0.5)"
                       : undefined,
-                }}
-              >
-                {cell.label && (
-                  <div className="cell-label">{cell.label}</div>
+                }}>
+                {cell.label && <div className="cell-label">{cell.label}</div>}
+                {cell.secret && (
+                  <div className="cell-secret" title="Secret Passage">
+                    ★
+                  </div>
                 )}
-                {cell.secret && <div className="cell-secret" title="Secret Passage">★</div>}
                 <div className="cell-tokens">
                   {playersHere.map((player) => {
                     const color =
