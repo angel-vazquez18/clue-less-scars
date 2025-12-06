@@ -1,16 +1,17 @@
 const { makeEnv } = require('../schema/envelope');
 const T = require('../schema/types');
+const { resolveGameAndPlayer, playerHasCard, isCardRelevantToSuggestion, ensureActiveTurn } = require('../state/games');
+
 
 function handleReconnect(ws, env) {
-  const { gameId, payload, requestId } = env;
-  // respond with same seq
-  if (!playerId) {
+	const { gameId, payload, requestId } = env;
+	// respond with same seq
+	const { game, player } = resolveGameAndPlayer(ws, gameId);
+	if (!playerId) {
 		return sendWs(ws, makeEnv('ERROR', game.gameId, {
 			code: 'MISSING_PLAYER_ID', message: 'playerId required to reconnect'
 		}, requestId));
 	}
-
-	const player = game.players[playerId];
 	if (!player) {
 		return sendWs(ws, makeEnv('ERROR', game.gameId, {
 			code: 'PLAYER_NOT_FOUND', message: 'No such player in this game'
