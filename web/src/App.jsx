@@ -584,7 +584,7 @@ function App() {
         </div>
       </header>
 
-      <main className="app-main">
+      <main className="app-main" role="main">
         {showJoinForm ? (
           <div className="join-form">
             <h2>Join Game</h2>
