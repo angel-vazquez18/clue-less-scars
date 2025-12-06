@@ -392,6 +392,12 @@
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
+.reference-item--in-hand {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+
 .info-stack .message-log {
   flex: 1;
   max-height: 45vh;
