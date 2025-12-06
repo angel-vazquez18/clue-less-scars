@@ -50,8 +50,11 @@ const formatPosition = (currentPlayer, gameStarted, gameState) => {
   if (!gameStarted) return "Lobby";
   const position = gameState.players.map((player) => {
     if (player.position === null) return "Not Placed";
-    if (player.id === currentPlayer.id && player.position.zone) {
+    if (player.id === currentPlayer.id && player.position.zone === "HALLWAY") {
       return `${player.position.zone} ${player.position.id}`;
+    }
+    if (player.id === currentPlayer.id && player.position.zone === "ROOM") {
+      return `${player.position.id}`;
     }
   });
   return position;
