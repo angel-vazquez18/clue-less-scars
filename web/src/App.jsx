@@ -28,6 +28,7 @@ function App() {
   const [error, setError] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
   const [handCards, setHandCards] = useState([]);
+  const [seenCards, setSeenCards] = useState([]);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [awaitingDisprove, setAwaitingDisprove] = useState(false);
   const [refutePrompt, setRefutePrompt] = useState(null);
@@ -296,14 +297,34 @@ function App() {
 
         case 'DISPROVE_RESULT':
           if (message.payload.disproverId) {
-            const personalCard = message.payload.cardId ? ` (card shown: ${message.payload.cardId})` : '';
-            addMessage(`Suggestion was disproved${personalCard}!`, 'player-action');
+            const personalCard = message.payload.cardId
+              ? ` (card shown: ${message.payload.cardId})`
+              : '';
+            addMessage(
+              `Suggestion was disproved${personalCard}!`,
+              'player-action'
+            );
+
+            // If this message includes the specific card shown to us,
+            // store it in seenCards so we can cross it off in Reference.
+            if (message.payload.cardId) {
+              setSeenCards((prev) =>
+                prev.includes(message.payload.cardId)
+                  ? prev
+                  : [...prev, message.payload.cardId]
+              );
+            }
           } else {
-            addMessage('No one could disprove the suggestion', 'player-action');
+            addMessage(
+              'No one could disprove the suggestion',
+              'player-action'
+            );
           }
           setAwaitingDisprove(false);
           setRefutePrompt(null);
-          setGameState(prev => prev ? { ...prev, pendingSuggestion: null } : prev);
+          setGameState((prev) =>
+            prev ? { ...prev, pendingSuggestion: null } : prev
+          );
           break;
           
         case 'ACCUSATION_RESOLVED': {
@@ -373,6 +394,8 @@ function App() {
         case 'YOUR_HAND': {
           const cards = Array.isArray(message.payload.cards) ? message.payload.cards : [];
           setHandCards(cards);
+          // Reset seen cards when receiving a fresh hand (e.g., new game)
+          setSeenCards([]);
           addMessage(`Your hand contains ${cards.length} card${cards.length === 1 ? '' : 's'}.`, 'hand');
           break;
         }
@@ -668,6 +691,7 @@ function App() {
                   awaitingDisprove={awaitingDisprove}
                   refutePrompt={refutePrompt}
                   hand={handCards}
+                  knownCards={seenCards}
                   solution={revealedSolution}
                   accusationResult={accusationResult}
                   onPlayAgain={handlePlayAgain}
