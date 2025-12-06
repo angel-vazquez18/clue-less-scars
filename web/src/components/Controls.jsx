@@ -268,11 +268,6 @@ const Controls = ({
                     "first move option: ",
                     legalMoveOptions[0]
                   )}
-                  {/* {legalMoveOptions.map((locationId) => (
-                    <option key={locationId} value={locationId}>
-                      {formatLocationLabel(locationId)}
-                    </option>
-                  ))} */}
                 </select>
               </div>
               <div className="form-actions">
