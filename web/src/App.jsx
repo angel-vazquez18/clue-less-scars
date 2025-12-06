@@ -634,6 +634,7 @@ function App() {
                 onChat={handleChat}
                 onPing={handlePing}
                 onEndTurn={handleEndTurn}
+                onReconnect={handleReconnect}
               />
             </div>
 
