@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 const SUSPECTS = [
   "Miss Scarlet",
@@ -30,34 +30,83 @@ const ROOMS = [
   "Study",
 ];
 
-const changeRefItemColor = (e) => {
-  const refItem = e.target;
-  if (refItem.style.backgroundColor === "rgb(255, 255, 255)") {
-    refItem.style.backgroundColor = "rgb(148, 21, 21)";
-    refItem.style.color = "rgb(255, 255, 255)";
-  } else if (refItem.style.backgroundColor === "rgb(148, 21, 21)") {
-    refItem.style.backgroundColor = "rgb(41, 159, 41)";
-  } else {
-    refItem.style.backgroundColor = "rgb(255, 255, 255)";
-    refItem.style.color = "rgba(4, 4, 4, 1)";
-  }
+const SUSPECT_ID_MAP = {
+  "Miss Scarlet": "scarlet",
+  "Colonel Mustard": "mustard",
+  "Mrs. White": "white",
+  "Mr. Green": "green",
+  "Mrs. Peacock": "peacock",
+  "Professor Plum": "plum",
 };
+
+const WEAPON_ID_MAP = {
+  Candlestick: "candlestick",
+  Knife: "knife",
+  "Lead Pipe": "leadpipe",
+  Revolver: "revolver",
+  Rope: "rope",
+  Wrench: "wrench",
+};
+
+const ROOM_ID_MAP = {
+  Kitchen: "kitchen",
+  Ballroom: "ballroom",
+  Conservatory: "conservatory",
+  "Dining Room": "dining",
+  "Billiard Room": "billiard",
+  Library: "library",
+  Lounge: "lounge",
+  Hall: "hall",
+  Study: "study",
+};
+
+
 
 const stripPrefix = (value) =>
   typeof value === "string" ? value.replace(/^[^:]+:/, "") : value;
 
-const formatPosition = (currentPlayer, gameStarted, gameState) => {
-  if (!gameStarted) return "Lobby";
-  const position = gameState.players.map((player) => {
-    if (player.position === null) return "Not Placed";
-    if (player.id === currentPlayer.id && player.position.zone === "HALLWAY") {
-      return `${player.position.zone} ${player.position.id}`;
-    }
-    if (player.id === currentPlayer.id && player.position.zone === "ROOM") {
-      return `${player.position.id}`;
-    }
-  });
-  return position;
+const getCardCategory = (card) => {
+  if (typeof card === "string") {
+    if (card.startsWith("suspect:")) return "SUSPECT";
+    if (card.startsWith("weapon:")) return "WEAPON";
+    if (card.startsWith("room:")) return "ROOM";
+  }
+
+  const name = stripPrefix(card);
+  if (SUSPECTS.includes(name)) return "SUSPECT";
+  if (WEAPONS.includes(name)) return "WEAPON";
+  if (ROOMS.includes(name)) return "ROOM";
+  return "UNKNOWN";
+};
+
+const getCardDescription = (card) => {
+  const category = getCardCategory(card);
+  const name = stripPrefix(card);
+  switch (category) {
+    case "SUSPECT":
+      return `${name} (suspect)`;
+    case "WEAPON":
+      return `${name} (weapon)`;
+    case "ROOM":
+      return `${name} (room)`;
+    default:
+      return name;
+  }
+};
+
+const formatPosition = (position, gameStarted) => {
+  if (!position) {
+    return gameStarted ? "Not placed" : "Lobby";
+  }
+  if (typeof position === "string") {
+    return position;
+  }
+  const { zone, id, secret } = position;
+  const parts = [];
+  if (id) parts.push(id);
+  else if (zone) parts.push(zone);
+  if (secret) parts.push("(Secret Passage)");
+  return parts.length > 0 ? parts.join(" ") : "Unknown";
 };
 
 const InfoPanel = ({
@@ -68,11 +117,49 @@ const InfoPanel = ({
   awaitingDisprove,
   refutePrompt,
   hand,
+  knownCards,
   solution,
   accusationResult,
   onPlayAgain,
 }) => {
+  const [handFilter, setHandFilter] = useState("ALL");
+  const [selectedCard, setSelectedCard] = useState(null);
+
   if (!gameState) return null;
+
+  const combinedKnown = new Set([
+    ...(Array.isArray(hand) ? hand : []),
+    ...(Array.isArray(knownCards) ? knownCards : []),
+  ]);
+
+  const hasCardInHand = (category, displayName) => {
+    if (!combinedKnown.size) return false;
+
+    let idSuffix;
+    let prefix;
+
+    switch (category) {
+      case "SUSPECT":
+        idSuffix = SUSPECT_ID_MAP[displayName];
+        prefix = "suspect";
+        break;
+      case "WEAPON":
+        idSuffix = WEAPON_ID_MAP[displayName];
+        prefix = "weapon";
+        break;
+      case "ROOM":
+        idSuffix = ROOM_ID_MAP[displayName];
+        prefix = "room";
+        break;
+      default:
+        return false;
+    }
+
+    if (!idSuffix) return false;
+    const fullId = `${prefix}:${idSuffix}`;
+    return combinedKnown.has(fullId);
+  };
+
 
   const currentTurnPlayerId = gameState.turn?.currentPlayerId;
   const currentTurnPlayer = gameState.players?.find(
@@ -112,7 +199,8 @@ const InfoPanel = ({
       <div
         className={`banner ${
           accusationResult.correct ? "success" : "warning"
-        }`}>
+        }`}
+      >
         {accusationResult.correct
           ? "Your accusation was correct!"
           : "Your accusation was incorrect."}
@@ -163,11 +251,13 @@ const InfoPanel = ({
         </div>
         <div className="info-item">
           <strong>Legal Moves:</strong>{" "}
-          {gameState.turn?.legalMoves ? gameState.turn.legalMoves.length : 0}
+          {gameState.turn?.legalMoves
+            ? gameState.turn.legalMoves.length
+            : 0}
         </div>
         <div className="info-item">
-          <strong>Turn Order:</strong> {gameState.turn?.order?.length || 0}{" "}
-          players
+          <strong>Turn Order:</strong>{" "}
+          {gameState.turn?.order?.length || 0} players
         </div>
       </div>
     </div>
@@ -192,7 +282,7 @@ const InfoPanel = ({
           </div>
           <div>
             <strong>Position:</strong>{" "}
-            {formatPosition(currentPlayer, gameStarted, gameState)}
+            {formatPosition(currentPlayer.position, gameStarted)}
           </div>
         </div>
       </div>
@@ -201,17 +291,87 @@ const InfoPanel = ({
 
   const renderHand = () => {
     if (!Array.isArray(hand)) return null;
-    return (
-      <div className="panel-section hand-panel">
-        <h4>Your Cards</h4>
-        {hand.length === 0 ? (
+
+    const filteredHand =
+      handFilter === "ALL"
+        ? hand
+        : hand.filter((card) => getCardCategory(card) === handFilter);
+
+    const handleFilterChange = (filter) => {
+      setHandFilter(filter);
+      setSelectedCard(null);
+    };
+
+    if (hand.length === 0) {
+      return (
+        <div className="panel-section hand-panel">
+          <h4>Your Cards</h4>
           <p>You have no cards.</p>
-        ) : (
-          <ul>
-            {hand.map((card) => (
-              <li key={card}>{stripPrefix(card)}</li>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="panel-section hand-panel"
+        aria-label="Your hand of cards"
+      >
+        <div className="hand-header">
+          <h4>Your Cards</h4>
+          <div
+            className="hand-filters"
+            role="radiogroup"
+            aria-label="Filter cards by type"
+          >
+            {["ALL", "SUSPECT", "WEAPON", "ROOM"].map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                className={`hand-filter-btn${
+                  handFilter === filter ? " hand-filter-btn--active" : ""
+                }`}
+                onClick={() => handleFilterChange(filter)}
+                aria-pressed={handFilter === filter}
+              >
+                {filter === "ALL"
+                  ? "All"
+                  : filter.charAt(0) + filter.slice(1).toLowerCase() + "s"}
+              </button>
             ))}
-          </ul>
+          </div>
+        </div>
+
+        <div className="hand-cards" role="list">
+          {filteredHand.map((card) => {
+            const category = getCardCategory(card);
+            const name = stripPrefix(card);
+            const isSelected = selectedCard === card;
+            return (
+              <button
+                key={card}
+                type="button"
+                className={`hand-card hand-card--${category.toLowerCase()}${
+                  isSelected ? " hand-card--selected" : ""
+                }`}
+                onClick={() => setSelectedCard(card)}
+                onMouseEnter={() => setSelectedCard(card)}
+                role="listitem"
+                aria-label={getCardDescription(card)}
+                title={getCardDescription(card)}
+              >
+                <span className="hand-card-name">{name}</span>
+                <span className="hand-card-category">
+                  {category === "UNKNOWN" ? "Card" : category.toLowerCase()}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedCard && (
+          <div className="hand-card-details" aria-live="polite">
+            <strong>Selected card:</strong> {getCardDescription(selectedCard)}
+          </div>
         )}
       </div>
     );
@@ -241,40 +401,55 @@ const InfoPanel = ({
         <div className="reference-section">
           <h5>Suspects</h5>
           <div className="reference-list">
-            {SUSPECTS.map((suspect) => (
-              <span
-                key={suspect}
-                className="reference-item"
-                onClick={changeRefItemColor}>
-                {suspect}
-              </span>
-            ))}
+            {SUSPECTS.map((suspect) => {
+              const inHand = hasCardInHand("SUSPECT", suspect);
+              return (
+                <span
+                  key={suspect}
+                  className={`reference-item${
+                    inHand ? " reference-item--in-hand" : ""
+                  }`}
+                >
+                  {suspect}
+                </span>
+              );
+            })}
           </div>
         </div>
         <div className="reference-section">
           <h5>Weapons</h5>
           <div className="reference-list">
-            {WEAPONS.map((weapon) => (
-              <span
-                key={weapon}
-                className="reference-item"
-                onClick={changeRefItemColor}>
-                {weapon}
-              </span>
-            ))}
+            {WEAPONS.map((weapon) => {
+              const inHand = hasCardInHand("WEAPON", weapon);
+              return (
+                <span
+                  key={weapon}
+                  className={`reference-item${
+                    inHand ? " reference-item--in-hand" : ""
+                  }`}
+                >
+                  {weapon}
+                </span>
+              );
+            })}
           </div>
         </div>
         <div className="reference-section">
           <h5>Rooms</h5>
           <div className="reference-list">
-            {ROOMS.map((room) => (
-              <span
-                key={room}
-                className="reference-item"
-                onClick={changeRefItemColor}>
-                {room}
-              </span>
-            ))}
+            {ROOMS.map((room) => {
+              const inHand = hasCardInHand("ROOM", room);
+              return (
+                <span
+                  key={room}
+                  className={`reference-item${
+                    inHand ? " reference-item--in-hand" : ""
+                  }`}
+                >
+                  {room}
+                </span>
+              );
+            })}
           </div>
         </div>
       </div>
