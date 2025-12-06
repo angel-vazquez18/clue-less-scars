@@ -57,15 +57,15 @@ const MessageLog = ({ messages }) => {
   };
 
   return (
-    <div className="message-log">
+    <div className="message-log" aria-label="Game events and chat messages">
       <div className="message-log-header">
-        <h4>Message Log</h4>
+        <h4 id="message-log-heading">Message Log</h4>
         <div className="message-count">
           {messages.length} messages
         </div>
       </div>
       
-      <div className="message-list">
+      <div className="message-list" role="log" aria-live="polite" aria-relevant="additions" aria-labelledby="message-log-heading">
         {messages.length === 0 ? (
           <div className="no-messages">
             <p>No messages yet. Connect to the server to see real-time updates.</p>
@@ -77,6 +77,7 @@ const MessageLog = ({ messages }) => {
               <div 
                 key={message.id} 
                 className={`message-item ${getMessageTypeClass(message.type)}`}
+                role="listitem"
               >
                 <div className="message-header">
                   <span className="message-type">{message.type}</span>
