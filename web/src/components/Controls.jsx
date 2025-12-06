@@ -30,6 +30,70 @@ const ROOMS = [
   "Study",
 ];
 
+const suspectNameToId = (name) => {
+  switch (name) {
+    case "Miss Scarlet":
+      return "suspect:scarlet";
+    case "Colonel Mustard":
+      return "suspect:mustard";
+    case "Mrs. White":
+      return "suspect:white";
+    case "Mr. Green":
+      return "suspect:green";
+    case "Mrs. Peacock":
+      return "suspect:peacock";
+    case "Professor Plum":
+      return "suspect:plum";
+    default:
+      return name;
+  }
+};
+
+const weaponNameToId = (name) => {
+  switch (name) {
+    case "Candlestick":
+      return "weapon:candlestick";
+    case "Knife":
+      return "weapon:knife";
+    case "Lead Pipe":
+      return "weapon:leadpipe";
+    case "Revolver":
+      return "weapon:revolver";
+    case "Rope":
+      return "weapon:rope";
+    case "Wrench":
+      return "weapon:wrench";
+    default:
+      return name;
+  }
+};
+
+const roomNameToId = (name) => {
+  switch (name) {
+    case "Kitchen":
+      return "room:kitchen";
+    case "Ballroom":
+      return "room:ballroom";
+    case "Conservatory":
+      return "room:conservatory";
+    case "Dining Room":
+      return "room:dining";
+    case "Billiard Room":
+      return "room:billiard";
+    case "Library":
+      return "room:library";
+    case "Lounge":
+      return "room:lounge";
+    case "Hall":
+      return "room:hall";
+    case "Study":
+      return "room:study";
+    default:
+      return name;
+  }
+};
+
+
 const SECRET_PASSAGES = {
   Study: "Kitchen",
   Kitchen: "Study",
@@ -39,6 +103,11 @@ const SECRET_PASSAGES = {
 
 const stripPrefix = (value) =>
   typeof value === "string" ? value.replace(/^[^:]+:/, "") : value;
+
+const normalizeCardKey = (value) =>
+  typeof value === "string"
+    ? stripPrefix(value).toLowerCase().trim()
+    : "";
 
 const isHallway = (locationId) =>
   typeof locationId === "string" &&
@@ -99,11 +168,17 @@ const Controls = ({
 
   const matchingDisproveCards = useMemo(() => {
     if (!Array.isArray(hand) || !refutePrompt) return [];
+
     const { suspectId, weaponId, roomId } = refutePrompt;
+
+    // Normalize suggestion ids and compare to normalized hand card ids
     const wanted = new Set(
-      [suspectId, weaponId, roomId].filter(Boolean)
+      [suspectId, weaponId, roomId]
+        .filter(Boolean)
+        .map((v) => normalizeCardKey(v))
     );
-    return hand.filter((card) => wanted.has(card));
+
+    return hand.filter((card) => wanted.has(normalizeCardKey(card)));
   }, [hand, refutePrompt]);
 
   const canDisprove = matchingDisproveCards.length > 0;
@@ -185,8 +260,10 @@ const Controls = ({
   const handleSuggestion = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const suspectId = formData.get("suspectId");
-    const weaponId = formData.get("weaponId");
+    const suspectName = formData.get("suspectId");
+    const weaponName = formData.get("weaponId");
+    const suspectId = suspectName ? suspectNameToId(suspectName) : null;
+    const weaponId = weaponName ? weaponNameToId(weaponName) : null;
     onSuggestion(suspectId, weaponId);
     setShowSuggestionForm(false);
   };
@@ -194,9 +271,12 @@ const Controls = ({
   const handleAccusation = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const suspectId = formData.get("suspectId");
-    const weaponId = formData.get("weaponId");
-    const roomId = formData.get("roomId");
+    const suspectName = formData.get("suspectId");
+    const weaponName = formData.get("weaponId");
+    const roomName = formData.get("roomId");
+    const suspectId = suspectName ? suspectNameToId(suspectName) : null;
+    const weaponId = weaponName ? weaponNameToId(weaponName) : null;
+    const roomId = roomName ? roomNameToId(roomName) : null;
     onAccusation(suspectId, weaponId, roomId);
     setShowAccusationForm(false);
   };
