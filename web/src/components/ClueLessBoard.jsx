@@ -165,10 +165,16 @@ const ClueLessBoard = ({
   }
 
   return (
-    <div className="cl-board-tabletop">
+    <div
+      className="cl-board-tabletop"
+      role="region"
+      aria-label="Clue-Less game board"
+    >
       <div className="cl-board-container">
         <div
           className="cl-board-grid"
+          role="grid"
+          aria-label="Rooms and hallways"
           style={{
             "--cl-columns": boardMetrics.columns,
             "--cl-rows": boardMetrics.rows,
@@ -204,6 +210,16 @@ const ClueLessBoard = ({
                   gridColumn: `${cell.x + 1} / span ${spanX}`,
                   gridRow: `${cell.y + 1} / span ${spanY}`,
                 }}
+                role="gridcell"
+                aria-label={
+                  cell.label
+                    ? `${cell.label}${
+                        cellPlayers.length || cellWeapons.length
+                          ? `, ${cellPlayers.length} player(s), ${cellWeapons.length} weapon(s)`
+                          : ""
+                      }`
+                    : cell.id
+                }
                 data-secret-to={secretTarget || undefined}
               >
                 {doorEntries.map(({ direction, hallwayId }) => (
