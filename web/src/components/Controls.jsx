@@ -249,11 +249,26 @@ const Controls = ({
                 <label>Legal destinations:</label>
                 <select name="destinationId" required>
                   <option value="">Select destination</option>
-                  {legalMoveOptions.map((locationId) => (
-                    <option key={locationId} value={locationId}>
-                      {formatLocationLabel(locationId)}
-                    </option>
-                  ))}
+                  {console.log("legalMoveOptions: ", legalMoveOptions)}
+                  {!isHallway(legalMoveOptions[0])
+                    ? legalMoveOptions.slice(0, 2).map((locationId) => (
+                        <option key={locationId} value={locationId}>
+                          {formatLocationLabel(locationId)}
+                        </option>
+                      ))
+                    : legalMoveOptions
+                        .splice(0, legalMoveOptions.length / 2)
+                        .map((locationId) => (
+                          <option key={locationId} value={locationId}>
+                            {formatLocationLabel(locationId)}
+                          </option>
+                        ))}
+                  {console.log(
+                    "does not start wtih hallway: ",
+                    !isHallway(legalMoveOptions[0]),
+                    "first move option: ",
+                    legalMoveOptions[0]
+                  )}
                 </select>
               </div>
               <div className="form-actions">
