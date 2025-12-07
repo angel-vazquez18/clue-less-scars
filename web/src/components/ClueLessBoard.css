@@ -240,6 +240,14 @@
   border: 2px solid rgba(255, 255, 255, 0.9);
 }
 
+.cl-token-suspect {
+  width: clamp(0.95rem, 1.7vw, 1.2rem);
+  height: clamp(0.95rem, 1.7vw, 1.2rem);
+  border-radius: 50%;
+  border: 2px dashed rgba(255, 255, 255, 0.9);
+}
+
+
 .cl-token-weapon {
   width: clamp(0.9rem, 1.6vw, 1.1rem);
   height: clamp(0.9rem, 1.6vw, 1.1rem);
