@@ -11,6 +11,17 @@ const CHARACTER_COLORS = {
   "Mrs. White": "#f7f7f7",
 };
 
+const SUSPECT_ID_TO_CHARACTER = {
+  "suspect:scarlet": "Miss Scarlet",
+  "suspect:mustard": "Colonel Mustard",
+  "suspect:white": "Mrs. White",
+  "suspect:green": "Mr. Green",
+  "suspect:peacock": "Mrs. Peacock",
+  "suspect:plum": "Professor Plum",
+};
+
+
+
 const classNames = (...values) =>
   values
     .flat()
@@ -148,6 +159,34 @@ const ClueLessBoard = ({
       });
     return grouped;
   }, [gameState?.players, startingPositions]);
+  const takenCharacters = useMemo(() => {
+    const taken = new Set();
+    (gameState?.players || []).forEach((player) => {
+      if (player.characterId) {
+        taken.add(player.characterId);
+      }
+    });
+    return taken;
+  }, [gameState?.players]);
+
+  const suspectTokensByCell = useMemo(() => {
+    const tokens = gameState?.board?.suspectTokens ?? {};
+    const grouped = new Map();
+
+    Object.entries(tokens).forEach(([suspectId, locationId]) => {
+      if (!locationId) return;
+      const characterName = SUSPECT_ID_TO_CHARACTER[suspectId];
+      if (characterName && takenCharacters.has(characterName)) {
+        // That suspect is already represented by a player token
+        return;
+      }
+      if (!grouped.has(locationId)) grouped.set(locationId, []);
+      grouped.get(locationId).push(suspectId);
+    });
+
+    return grouped;
+  }, [gameState?.board?.suspectTokens, takenCharacters]);
+
 
   const weaponsByCell = useMemo(() => {
     const tokens = gameState?.board?.weaponTokens ?? {};
@@ -188,6 +227,7 @@ const ClueLessBoard = ({
             const secretTarget = secretLookup.get(cell.id);
             const doorEntries = doorLookup.get(cell.id) ?? [];
             const cellPlayers = playersByCell.get(cell.id) ?? [];
+            const cellSuspects = suspectTokensByCell.get(cell.id) ?? [];
             const cellWeapons = weaponsByCell.get(cell.id) ?? [];
             const cellOrientation = orientationClass(cell);
 
@@ -264,6 +304,22 @@ const ClueLessBoard = ({
                           }}
                         />
                       ))}
+                      {cellSuspects.map((suspectId) => {
+                        const characterName =
+                          SUSPECT_ID_TO_CHARACTER[suspectId] ||
+                          suspectId.replace(/^suspect:/, "");
+                        return (
+                          <span
+                            key={suspectId}
+                            className="cl-token cl-token-suspect"
+                            title={characterName}
+                            style={{
+                              backgroundColor:
+                                CHARACTER_COLORS[characterName] || "#4a5568",
+                            }}
+                          />
+                        );
+                      })}
                       {cellWeapons.map((weaponId) => (
                         <span
                           key={weaponId}
