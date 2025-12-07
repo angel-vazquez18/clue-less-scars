@@ -392,11 +392,18 @@ function App() {
           break;
           
         case 'YOUR_HAND': {
-          const cards = Array.isArray(message.payload.cards) ? message.payload.cards : [];
+          const cards = Array.isArray(message.payload.cards)
+            ? message.payload.cards
+            : [];
           setHandCards(cards);
           // Reset seen cards when receiving a fresh hand (e.g., new game)
           setSeenCards([]);
-          addMessage(`Your hand contains ${cards.length} card${cards.length === 1 ? '' : 's'}.`, 'hand');
+          addMessage(
+            `Your hand contains ${cards.length} card${
+              cards.length === 1 ? '' : 's'
+            }.`,
+            'hand'
+          );
           break;
         }
           
