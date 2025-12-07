@@ -111,8 +111,7 @@ const normalizeCardKey = (value) =>
 
 const isHallway = (locationId) =>
   typeof locationId === "string" &&
-  locationId.includes("-") &&
-  (locationId.startsWith("H") || locationId.startsWith("V"));
+  (/^H\d/.test(locationId) || /^V\d/.test(locationId));
 
 const formatLocationLabel = (locationId) => {
   if (!locationId) return "Unknown";
