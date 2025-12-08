@@ -29,6 +29,7 @@ function App() {
   const [copySuccess, setCopySuccess] = useState(false);
   const [handCards, setHandCards] = useState([]);
   const [seenCards, setSeenCards] = useState([]);
+  const [revealedCards, setRevealedCards] = useState([]); // Local log of cards revealed to this player
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [awaitingDisprove, setAwaitingDisprove] = useState(false);
   const [refutePrompt, setRefutePrompt] = useState(null);
@@ -211,27 +212,27 @@ function App() {
           const {
             playerId: activeId,
             playerName,
-            movementAllowance,
-            movesRemaining,
-            diceRoll,
+            hasMoved,
+            mustSuggest,
             autoAdvanced,
-            reason
+            reason,
+            legalMoves
           } = message.payload;
           const turnPlayerName = playerName || players.find(p => p.id === activeId)?.name || activeId;
           
-          // Build move text with dice roll information
-          let moveText = '';
-          if (diceRoll != null && movementAllowance != null) {
-            moveText = ` 🎲 Rolled ${diceRoll} (${movementAllowance} moves available, ${movesRemaining ?? '?'} remaining)`;
-          } else if (movementAllowance != null) {
-            moveText = ` (moves available: ${movementAllowance}, remaining: ${movesRemaining ?? '?'})`;
+          // Build turn text
+          let turnText = '';
+          if (mustSuggest) {
+            turnText = ' (must make suggestion)';
+          } else if (hasMoved) {
+            turnText = ' (already moved)';
           }
           
           // Show more prominent message if turn auto-advanced
           if (autoAdvanced || reason === 'TURN_AUTO_ADVANCED') {
-            addMessage(`🔄 Turn automatically advanced to ${turnPlayerName}${moveText}`, 'turn-auto');
+            addMessage(`🔄 Turn automatically advanced to ${turnPlayerName}${turnText}`, 'turn-auto');
           } else {
-            addMessage(`It's ${turnPlayerName}'s turn${moveText}`, 'turn');
+            addMessage(`It's ${turnPlayerName}'s turn${turnText}`, 'turn');
           }
           
           setAwaitingDisprove(false);
@@ -247,12 +248,10 @@ function App() {
                 ...prev.turn,
                 currentPlayerId: activeId,
                 phase: 'move',
-                movementAllowance:
-                  movementAllowance ?? prev.turn?.movementAllowance ?? null,
-                movesRemaining: movesRemaining ?? prev.turn?.movesRemaining ?? null,
-                diceRoll: diceRoll ?? prev.turn?.diceRoll ?? null,
-                legalMoves: Array.isArray(message.payload.legalMoves)
-                  ? message.payload.legalMoves
+                hasMoved: hasMoved ?? prev.turn?.hasMoved ?? false,
+                mustSuggest: mustSuggest ?? prev.turn?.mustSuggest ?? false,
+                legalMoves: Array.isArray(legalMoves)
+                  ? legalMoves
                   : prev.turn?.legalMoves || []
               }
             };
@@ -261,7 +260,7 @@ function App() {
         }
           
         case 'PLAYER_MOVED': {
-          const { playerId, to, movesRemaining, movementAllowance, legalMoves } = message.payload;
+          const { playerId, to, mustSuggest, legalMoves } = message.payload;
           addMessage(
             `Player moved to ${to.zone} ${to.id || ''}`.trim(),
             'player-action'
@@ -276,9 +275,8 @@ function App() {
                 ),
                 turn: {
                   ...prev.turn,
-                  movesRemaining: movesRemaining ?? prev.turn?.movesRemaining ?? null,
-                  movementAllowance:
-                    movementAllowance ?? prev.turn?.movementAllowance ?? null,
+                  hasMoved: true,
+                  mustSuggest: mustSuggest ?? prev.turn?.mustSuggest ?? false,
                   legalMoves:
                     Array.isArray(legalMoves) && legalMoves.length > 0
                       ? legalMoves
@@ -360,25 +358,48 @@ function App() {
           break;
         }
 
-        case 'DISPROVE_RESULT':
-          if (message.payload.disproverId) {
-            const personalCard = message.payload.cardId
-              ? ` (card shown: ${message.payload.cardId})`
-              : '';
-            addMessage(
-              `Suggestion was disproved${personalCard}!`,
-              'player-action'
+        case 'CARD_REVEAL':
+          // Private message only to suggester - store in revealed cards log
+          const { revealingPlayer, revealingPlayerCharacter, card, cardId: revealedCardId } = message.payload;
+          const revealEntry = {
+            player: revealingPlayer,
+            character: revealingPlayerCharacter,
+            card: card,
+            cardId: revealedCardId,
+            timestamp: new Date().toISOString()
+          };
+          
+          setRevealedCards((prev) => [...prev, revealEntry]);
+          
+          // Add message notification
+          const characterInfo = revealingPlayerCharacter ? ` (${revealingPlayerCharacter})` : '';
+          addMessage(
+            `${revealingPlayer}${characterInfo} revealed: ${card}`,
+            'card-reveal'
+          );
+          
+          // Also add to seenCards for reference tracking
+          if (revealedCardId) {
+            setSeenCards((prev) =>
+              prev.includes(revealedCardId)
+                ? prev
+                : [...prev, revealedCardId]
             );
+          }
+          break;
 
-            // If this message includes the specific card shown to us,
-            // store it in seenCards so we can cross it off in Reference.
-            if (message.payload.cardId) {
-              setSeenCards((prev) =>
-                prev.includes(message.payload.cardId)
-                  ? prev
-                  : [...prev, message.payload.cardId]
+        case 'DISPROVE_RESULT':
+          // Check if this is the private message to suggester (with cardId) or public broadcast
+          if (message.payload.disproverId) {
+            // If this is a public broadcast (no cardId), show generic message
+            if (!message.payload.cardId) {
+              addMessage(
+                'Suggestion was disproved!',
+                'player-action'
               );
             }
+            // If cardId is present, it means we already received CARD_REVEAL above
+            // So we don't need to show the card again here
           } else {
             addMessage(
               'No one could disprove the suggestion',
@@ -573,16 +594,6 @@ function App() {
     sendMessage(message);
   };
 
-  const handleRollDice = () => {
-    const message = {
-      type: 'ROLL_DICE',
-      gameId,
-      payload: {},
-      ts: new Date().toISOString(),
-      version: '1.0'
-    };
-    sendMessage(message);
-  };
 
   const handleSuggestion = (suspectId, weaponId) => {
     const message = {
@@ -954,10 +965,10 @@ function App() {
                   refutePrompt={refutePrompt}
                   hand={gameStarted ? handCards : []}
                   knownCards={seenCards}
+                  revealedCards={revealedCards}
                   solution={revealedSolution}
                   accusationResult={accusationResult}
                   onPlayAgain={handlePlayAgain}
-                  onRollDice={handleRollDice}
                   showOnlyHand={true}
                 />
               </div>
@@ -997,10 +1008,10 @@ function App() {
                   refutePrompt={refutePrompt}
                   hand={handCards}
                   knownCards={seenCards}
+                  revealedCards={revealedCards}
                   solution={revealedSolution}
                   accusationResult={accusationResult}
                   onPlayAgain={handlePlayAgain}
-                  onRollDice={handleRollDice}
                   hideHandAndReference={true}
                 />
               </div>

@@ -1815,6 +1815,12 @@
   border-left-color: #9e9e9e;
 }
 
+.message-card-reveal {
+  background: rgba(76, 175, 80, 0.15);
+  border-left-color: #4caf50;
+  font-weight: 500;
+}
+
 .message-header {
   display: flex;
   justify-content: space-between;
@@ -2056,6 +2062,85 @@
 :focus-visible {
   outline: 3px solid #ff9800;
   outline-offset: 2px;
+}
+
+/* Revealed Cards Log */
+.revealed-cards-section {
+  margin-top: 1rem;
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+}
+
+.revealed-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto;
+  max-height: 250px;
+  padding-right: 0.25rem;
+}
+
+.revealed-card-entry {
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  border-radius: 6px;
+  padding: 0.6rem;
+  transition: all 0.2s ease;
+}
+
+.revealed-card-entry:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(102, 126, 234, 0.4);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.revealed-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.3rem;
+  font-size: 0.85rem;
+}
+
+.revealed-card-player {
+  font-weight: 600;
+  color: #333;
+}
+
+.revealed-card-character {
+  color: #666;
+  font-weight: 400;
+  font-style: italic;
+}
+
+.revealed-card-time {
+  color: #888;
+  font-size: 0.75rem;
+}
+
+.revealed-card-name {
+  font-size: 0.9rem;
+  color: #555;
+  font-weight: 500;
+}
+
+.revealed-cards-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.revealed-cards-list::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.revealed-cards-list::-webkit-scrollbar-thumb {
+  background: rgba(102, 126, 234, 0.3);
+  border-radius: 3px;
+}
+
+.revealed-cards-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(102, 126, 234, 0.5);
 }
 
 /* Respect prefers-reduced-motion for transitions/animations */

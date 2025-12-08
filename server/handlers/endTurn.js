@@ -4,7 +4,8 @@ const {
   resolveGameAndPlayer,
   getCurrentPlayer,
   advanceTurn,
-  evaluateGameStatus
+  evaluateGameStatus,
+  inferZoneForLocation
 } = require('../state/games');
 const { broadcastTurnState } = require('./turn');
 const T = require('../schema/types');
@@ -48,6 +49,30 @@ function handleEndTurn(ws, env) {
     }, requestId));
   }
 
+  // Rule 5B: Cannot end turn while in hallway - must move to room first
+  if (player.position?.zone === 'HALLWAY') {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'MUST_LEAVE_HALLWAY',
+      message: 'You must move to a room from a hallway before ending your turn'
+    }, requestId));
+  }
+
+  // Check if player must make suggestion after secret passage or hallway move
+  const currentTurnState = game.turnState;
+  if (currentTurnState && (currentTurnState.mustSuggestAfterHallwayMove || currentTurnState.mustSuggestAfterSecretPassage)) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'MUST_SUGGEST',
+      message: 'You must make a suggestion after using a secret passage or entering a room from a hallway'
+    }, requestId));
+  }
+
+  // Clear movedBySuggestion flag for this specific player when they end their turn
+  // This ensures players who were moved by suggestion but didn't move/suggest this turn
+  // don't retain the flag indefinitely, but other players keep their flags until their turn
+  if (player.movedBySuggestion) {
+    player.movedBySuggestion = false;
+  }
+
   const status = evaluateGameStatus(game);
   if (status.ended) {
     game.started = false;
@@ -63,7 +88,7 @@ function handleEndTurn(ws, env) {
     return;
   }
 
-  const { playerId: nextPlayerId, turnState } = advanceTurn(game);
+  const { playerId: nextPlayerId, turnState: nextTurnState } = advanceTurn(game);
   if (!nextPlayerId) {
     const fallback = evaluateGameStatus(game);
     if (fallback.ended) {
@@ -81,7 +106,7 @@ function handleEndTurn(ws, env) {
     return;
   }
 
-  broadcastTurnState(game, nextPlayerId, turnState, 'TURN_ENDED');
+  broadcastTurnState(game, nextPlayerId, nextTurnState, 'TURN_ENDED');
 }
 
 function safe(ws, msg) {

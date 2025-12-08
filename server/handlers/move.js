@@ -56,18 +56,12 @@ function handleRequestMove(ws, env) {
     }, requestId));
   }
 
-  // Check if dice has been rolled
-  if (turnState.diceRoll == null) {
+  // Check if player has already moved this turn (deterministic: one move per turn)
+  // Exception: If player was moved by suggestion, they can still move normally
+  if (turnState.hasMoved && !turnState.enteredRoomViaSuggestion) {
     return safe(ws, makeEnv(T.ERROR, gameId, {
-      code: 'DICE_NOT_ROLLED',
-      message: 'You must roll the dice before moving'
-    }, requestId));
-  }
-
-  if (turnState.movesRemaining <= 0) {
-    return safe(ws, makeEnv(T.ERROR, gameId, {
-      code: 'NO_MOVES_LEFT',
-      message: 'No movement points remaining this turn'
+      code: 'ALREADY_MOVED',
+      message: 'You have already moved this turn'
     }, requestId));
   }
 
@@ -145,78 +139,56 @@ function handleRequestMove(ws, env) {
       message: 'Secret passage moves must be flagged explicitly'
     }, requestId));
   }
-  if (isSecret && turnState.secretPassageUsed) {
-    return safe(ws, makeEnv(T.ERROR, gameId, {
-      code: 'PASSAGE_ALREADY_USED',
-      message: 'Secret passage may only be used once per turn'
-    }, requestId));
-  }
 
-  const moveCost = isSecret ? turnState.movesRemaining : 1;
-  if (turnState.movesRemaining < moveCost) {
+  // Check if player is in hallway - must move to room
+  if (fromPosition.zone === 'HALLWAY' && inferredZone !== 'ROOM') {
     return safe(ws, makeEnv(T.ERROR, gameId, {
-      code: 'NO_MOVES_LEFT',
-      message: 'Not enough movement points remaining'
+      code: 'MUST_LEAVE_HALLWAY',
+      message: 'When in a hallway, you must move to an adjacent room'
     }, requestId));
   }
 
   const from = { ...fromPosition };
+  const wasInHallway = fromPosition.zone === 'HALLWAY';
   player.position = { 
     zone: inferredZone, 
     id: trimmedTargetId, 
     secret: !!isSecret 
   };
 
-  turnState.movesRemaining -= moveCost;
+  // Mark that player has moved this turn
+  turnState.hasMoved = true;
+  
+  // Clear suggestion movement flag after player chooses to move
+  if (turnState.enteredRoomViaSuggestion) {
+    turnState.enteredRoomViaSuggestion = false;
+    // Clear the movedBySuggestion flag on player
+    if (player.movedBySuggestion) {
+      player.movedBySuggestion = false;
+    }
+  }
+
+  // If using secret passage, must make suggestion immediately
   if (isSecret) {
     turnState.secretPassageUsed = true;
+    turnState.mustSuggestAfterSecretPassage = true;
   }
-  if (inferredZone === 'ROOM') {
-    turnState.movesRemaining = 0;
+
+  // If moved from hallway to room, must make suggestion immediately
+  if (wasInHallway && inferredZone === 'ROOM') {
+    turnState.mustSuggestAfterHallwayMove = true;
   }
+
+  // Update legal moves (if any remain, though with deterministic movement, typically none)
   const legalMoves = updateLegalMoves(game);
 
   broadcast(game, makeEnv(T.PLAYER_MOVED, gameId, { 
     playerId: player.id, 
     from, 
     to: player.position,
-    movesRemaining: turnState.movesRemaining,
-    movementAllowance: turnState.movementAllowance,
+    mustSuggest: turnState.mustSuggestAfterHallwayMove || turnState.mustSuggestAfterSecretPassage,
     legalMoves
   }));
-
-  // Auto-advance turn if player has no moves left and can't do anything else
-  if (turnState.movesRemaining === 0 && !game.pendingSuggestion) {
-    const playerZone = inferZoneForLocation(player.position.id);
-    const canSuggest = playerZone === 'ROOM';
-    
-    // If player can't suggest (not in room) and has no moves, auto-advance turn
-    if (!canSuggest) {
-      const status = evaluateGameStatus(game);
-      if (status.ended) {
-        game.started = false;
-        game.ended = true;
-        game.winnerId = status.winnerId;
-        game.turnState = null;
-        game.currentPlayerId = null;
-        broadcast(game, makeEnv(T.GAME_OVER, gameId, {
-          winnerId: status.winnerId,
-          solution: game.solution,
-          reason: status.reason
-        }));
-        return;
-      }
-
-      const { playerId: nextPlayerId, turnState: nextTurnState } = advanceTurn(game);
-      if (nextPlayerId) {
-        const previousPlayerName = player.name || player.id;
-        broadcast(game, makeEnv(T.INFO, gameId, {
-          message: `${previousPlayerName} ran out of moves and their turn ended automatically.`
-        }));
-        broadcastTurnState(game, nextPlayerId, nextTurnState, 'TURN_AUTO_ADVANCED');
-      }
-    }
-  }
 }
 
 function safe(ws, msg) { 

@@ -8,9 +8,8 @@ function buildTurnPayload(game, currentPlayerId, turnState, reason) {
     currentPlayerId,
     phase: game.started ? 'move' : 'lobby',
     order: game.turnOrder,
-    movementAllowance: turnState?.movementAllowance ?? null,
-    movesRemaining: turnState?.movesRemaining ?? null,
-    diceRoll: turnState?.diceRoll ?? null,
+    hasMoved: turnState?.hasMoved ?? false,
+    mustSuggest: turnState?.mustSuggestAfterHallwayMove || turnState?.mustSuggestAfterSecretPassage || false,
     legalMoves: turnState?.legalMoves ?? []
   };
   if (reason) {
@@ -52,9 +51,8 @@ function broadcastTurnState(game, currentPlayerId, turnState, reason) {
   const payload = {
     playerId: currentPlayerId,
     playerName: currentPlayer?.name || 'Unknown',
-    movementAllowance: turnState?.movementAllowance ?? null,
-    movesRemaining: turnState?.movesRemaining ?? null,
-    diceRoll: turnState?.diceRoll ?? null,
+    hasMoved: turnState?.hasMoved ?? false,
+    mustSuggest: turnState?.mustSuggestAfterHallwayMove || turnState?.mustSuggestAfterSecretPassage || false,
     legalMoves: turnState?.legalMoves ?? [],
     autoAdvanced: reason === 'TURN_AUTO_ADVANCED'
   };

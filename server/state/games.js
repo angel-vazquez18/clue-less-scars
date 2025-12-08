@@ -41,17 +41,7 @@ const ROOMS = [
   "Study",
 ];
 
-const DEFAULT_MOVES_PER_TURN = 4; // Fallback only - should use dice roll
-
-/**
- * Roll 2 six-sided dice for movement allowance (Clue rules)
- * Returns a value between 2 and 12
- */
-function rollDice() {
-  const die1 = Math.floor(Math.random() * 6) + 1;
-  const die2 = Math.floor(Math.random() * 6) + 1;
-  return die1 + die2;
-}
+// No dice system - movement is deterministic per rules
 
 function inferZoneForLocation(locationId) {
   if (!locationId) return null;
@@ -215,15 +205,53 @@ function isSecretPassageMove(fromId, toId) {
   return SECRET_PASSAGES[fromId] === toId;
 }
 
+/**
+ * Rule 6: Blocked Exits Rule
+ * If all doorways out of a room lead to occupied hallways, AND
+ * the room is not a corner room with secret passage, AND
+ * the player was not moved into the room by a suggestion,
+ * THEN the player cannot make a suggestion (but may make an accusation).
+ */
+function areAllExitsBlocked(game, roomId, playerId) {
+  if (!roomId || !playerId) return false;
+  
+  // Corner rooms with secret passages: Study, Lounge, Conservatory, Kitchen
+  const cornerRooms = ['Study', 'Lounge', 'Conservatory', 'Kitchen'];
+  if (cornerRooms.includes(roomId)) return false; // Rule doesn't apply to corner rooms
+  
+  // Check if player was moved by suggestion
+  const player = game.players[playerId];
+  if (player && player.movedBySuggestion) return false; // Rule doesn't apply
+  
+  // Get all doorways (hallways) adjacent to this room
+  const roomDoors = ROOM_DOOR_LOOKUP[roomId];
+  if (!roomDoors || roomDoors.size === 0) return false;
+  
+  // Check if all adjacent hallways are occupied
+  const allBlocked = Array.from(roomDoors).every(hallwayId => {
+    return Object.values(game.players).some(other => {
+      if (!other || other.id === playerId) return false;
+      return other.position?.id === hallwayId;
+    });
+  });
+  
+  return allBlocked;
+}
+
 function computeLegalMoves(game, playerId, turnState) {
   if (!game || !turnState || !playerId) return [];
   const player = game.players[playerId];
   const startId = player?.position?.id;
   if (!player || !startId || !isValidLocation(startId)) return [];
 
-  const maxSteps = turnState.movesRemaining || 0;
-  if (maxSteps <= 0) return [];
+  // Deterministic movement: if already moved this turn, no legal moves
+  // Exception: If player was moved by suggestion, they can still move normally
+  if (turnState.hasMoved && !turnState.enteredRoomViaSuggestion) return [];
 
+  const currentZone = inferZoneForLocation(startId);
+  if (!currentZone) return [];
+
+  // Get occupied hallways
   const occupiedHallways = new Set();
   Object.values(game.players).forEach((other) => {
     if (!other || other.id === playerId) return;
@@ -236,43 +264,37 @@ function computeLegalMoves(game, playerId, turnState) {
   });
 
   const results = new Set();
-  const queue = [
-    {
-      id: startId,
-      stepsLeft: maxSteps,
-      secretUsed: !!turnState.secretPassageUsed,
-    },
-  ];
-  const visited = new Set([
-    `${startId}:${turnState.secretPassageUsed ? 1 : 0}:${maxSteps}`,
-  ]);
+  const neighbors = BOARD_GRAPH[startId] || [];
 
-  while (queue.length > 0) {
-    const { id, stepsLeft, secretUsed } = queue.shift();
-    if (stepsLeft <= 0) continue;
-    const neighbors = BOARD_GRAPH[id] || [];
+  // Rule 5B: If in hallway, can only move to adjacent rooms
+  if (currentZone === "HALLWAY") {
     for (const next of neighbors) {
-      const isSecret = isSecretPassageMove(id, next);
-      if (isSecret && secretUsed) continue;
-      const cost = isSecret ? stepsLeft : 1;
-      if (stepsLeft < cost) continue;
+      const zone = inferZoneForLocation(next);
+      if (zone === "ROOM") {
+        results.add(next);
+      }
+    }
+    return Array.from(results);
+  }
+
+  // Rule 5A: If in room, can:
+  // 1. Move to adjacent hallway (if not occupied)
+  // 2. Use secret passage (if room has one)
+  if (currentZone === "ROOM") {
+    for (const next of neighbors) {
+      const isSecret = isSecretPassageMove(startId, next);
       const zone = inferZoneForLocation(next);
       if (!zone) continue;
-      if (zone === "HALLWAY" && occupiedHallways.has(next)) continue;
-      const nextStepsLeft = stepsLeft - cost;
-      const nextSecretUsed = secretUsed || isSecret;
-      const visitKey = `${next}:${nextSecretUsed ? 1 : 0}:${nextStepsLeft}`;
-      if (visited.has(visitKey)) continue;
-      visited.add(visitKey);
-      if (next !== startId) results.add(next);
 
-      const enteringRoom = zone === "ROOM";
-      if (!enteringRoom && nextStepsLeft > 0) {
-        queue.push({
-          id: next,
-          stepsLeft: nextStepsLeft,
-          secretUsed: nextSecretUsed,
-        });
+      if (zone === "HALLWAY") {
+        if (!occupiedHallways.has(next)) {
+          results.add(next);
+        }
+      } else if (zone === "ROOM" && isSecret) {
+        // Secret passage available
+        if (!turnState.secretPassageUsed) {
+          results.add(next);
+        }
       }
     }
   }
@@ -421,22 +443,26 @@ function ensureTurnMoveState(game) {
     return null;
   }
 
+  const currentPlayer = game.players[currentPlayerId];
+  
   if (!game.turnState || game.turnState.playerId !== currentPlayerId) {
-    // Initialize turn state without dice roll - player must roll manually
+    // Initialize turn state - deterministic movement (one move per turn)
+    // Rule 5A: If player was moved by suggestion, they can choose to suggest or move
+    const enteredRoomViaSuggestion = currentPlayer?.movedBySuggestion && currentPlayer?.position?.zone === 'ROOM';
+    
     game.turnState = {
       playerId: currentPlayerId,
-      diceRoll: null,
-      movementAllowance: null,
-      movesRemaining: null,
+      hasMoved: false,
       secretPassageUsed: false,
+      mustSuggestAfterHallwayMove: false,
+      mustSuggestAfterSecretPassage: false,
+      enteredRoomViaSuggestion: enteredRoomViaSuggestion,
       legalMoves: [],
     };
   }
 
-  // Only update legal moves if dice has been rolled
-  if (game.turnState.diceRoll != null) {
-    updateLegalMoves(game);
-  }
+  // Update legal moves based on current position and state
+  updateLegalMoves(game);
   
   return game.turnState;
 }
@@ -580,6 +606,12 @@ function nextTurn(game) {
     game.currentPlayerId = null;
     return null;
   }
+
+  // NOTE: movedBySuggestion flag should NOT be cleared here for all players
+  // It should only be cleared when that specific player takes an action:
+  // - When they move (handleRequestMove)
+  // - When they make a suggestion (handleMakeSuggestion)
+  // - When they explicitly end their turn (handleEndTurn)
 
   let idx = typeof game.turnIndex === "number" ? game.turnIndex : -1;
   const len = game.turnOrder.length;
@@ -734,5 +766,5 @@ module.exports = {
   advanceTurn,
   evaluateGameStatus,
   updateLegalMoves,
-  rollDice,
+  areAllExitsBlocked,
 };

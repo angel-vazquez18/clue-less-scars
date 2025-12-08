@@ -36,12 +36,24 @@ const getPlayerCellId = (player, startingPositions) => {
 };
 
 const normalizeCells = (cells = []) =>
-  cells.map((cell) => ({
-    label: cell.label ?? (cell.type === "room" ? cell.id : ""),
-    width: cell.width ?? 1,
-    height: cell.height ?? 1,
-    ...cell,
-  }));
+  cells.map((cell) => {
+    // Determine label: use provided label, or generate from ID
+    let label = cell.label;
+    if (!label) {
+      if (cell.type === "room") {
+        label = cell.id;
+      } else if (cell.type === "hallway") {
+        // For hallways, show short name (e.g., "H1-0" -> "H1", "V2-0" -> "V2")
+        label = cell.id.replace(/-0$/, "") || cell.id;
+      }
+    }
+    return {
+      label,
+      width: cell.width ?? 1,
+      height: cell.height ?? 1,
+      ...cell,
+    };
+  });
 
 const registerCell = (cell, occupancy) => {
   const { x, y, width, height } = cell;
@@ -235,6 +247,51 @@ const ClueLessBoard = ({
             const cellWeapons = weaponsByCell.get(cell.id) ?? [];
             const cellOrientation = orientationClass(cell);
 
+            // Build comprehensive tooltip title
+            const buildTooltip = () => {
+              const parts = [];
+              
+              // Add location name
+              if (cell.type === "room") {
+                parts.push(`Room: ${cell.label || cell.id}`);
+              } else if (cell.type === "hallway") {
+                parts.push(`Hallway: ${cell.label || cell.id}`);
+              } else if (cell.type === "void") {
+                return null; // Don't show tooltip for void cells
+              }
+              
+              // Add secret passage info
+              if (secretTarget) {
+                parts.push(`Secret passage to ${secretTarget}`);
+              }
+              
+              // Add player info
+              if (cellPlayers.length > 0) {
+                const playerNames = cellPlayers.map(p => p.characterId || p.name).join(", ");
+                parts.push(`Players: ${playerNames}`);
+              }
+              
+              // Add suspect token info
+              if (cellSuspects.length > 0) {
+                const suspectNames = cellSuspects.map(suspectId => {
+                  return SUSPECT_ID_TO_CHARACTER[suspectId] || suspectId.replace(/^suspect:/, "");
+                }).join(", ");
+                parts.push(`Suspect tokens: ${suspectNames}`);
+              }
+              
+              // Add weapon info
+              if (cellWeapons.length > 0) {
+                const weaponNames = cellWeapons.map(weaponId => 
+                  weaponId.replace(/^weapon:/, "")
+                ).join(", ");
+                parts.push(`Weapons: ${weaponNames}`);
+              }
+              
+              return parts.length > 0 ? parts.join("\n") : null;
+            };
+
+            const tooltipTitle = buildTooltip();
+
             return (
               <div
                 key={cell.id}
@@ -255,6 +312,7 @@ const ClueLessBoard = ({
                   gridRow: `${cell.y + 1} / span ${spanY}`,
                 }}
                 role="gridcell"
+                title={tooltipTitle || undefined}
                 aria-label={
                   cell.label
                     ? `${cell.label}${
@@ -271,11 +329,12 @@ const ClueLessBoard = ({
                     key={`${hallwayId}-${direction}`}
                     className={`cl-door cl-door-${direction}`}
                     data-door-to={hallwayId}
+                    title={`Door to ${hallwayId}`}
                     aria-hidden="true"
                   />
                 ))}
 
-                <div className="cl-cell-surface">
+                <div className="cl-cell-surface" title={tooltipTitle || undefined}>
                   {cell.type === "room" && (
                     <div className="cl-room-label" title={cell.label}>
                       {cell.label}
@@ -283,7 +342,9 @@ const ClueLessBoard = ({
                   )}
 
                   {cell.type === "hallway" && cell.label && (
-                    <div className="cl-hallway-label">{cell.label}</div>
+                    <div className="cl-hallway-label" title={cell.label}>
+                      {cell.label}
+                    </div>
                   )}
 
                   {secretTarget && (

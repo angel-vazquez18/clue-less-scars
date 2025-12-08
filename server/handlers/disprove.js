@@ -56,7 +56,28 @@ function handleRespondDisprove(ws, env) {
       }, requestId));
     }
 
-    // Reveal privately to suggester
+    // Get revealing player's name and character for private reveal
+    const revealingPlayerName = player.name || player.id;
+    const revealingPlayerCharacter = player.characterId || null;
+    
+    // Format card name for display (remove prefix)
+    // Client will handle proper capitalization/formatting
+    const formatCardName = (cardId) => {
+      if (!cardId) return cardId;
+      // Remove prefix like "suspect:", "weapon:", "room:"
+      return cardId.replace(/^[^:]+:/, '');
+    };
+    const cardName = formatCardName(cardId);
+
+    // Send private CARD_REVEAL to suggester only
+    sendToPlayer(game, pending.suggesterId, T.CARD_REVEAL, {
+      revealingPlayer: revealingPlayerName,
+      revealingPlayerCharacter: revealingPlayerCharacter,
+      card: cardName,
+      cardId: cardId // Keep original ID for reference
+    }, requestId);
+
+    // Send DISPROVE_RESULT to suggester (for backwards compatibility)
     sendToPlayer(game, pending.suggesterId, T.DISPROVE_RESULT, { 
       disproverId: player.id,
       cardId,
@@ -70,6 +91,10 @@ function handleRespondDisprove(ws, env) {
     }));
 
     game.pendingSuggestion = null;
+    
+    // After disproval, the moved player (if it was the active player) can choose to suggest or move
+    // The flag will be cleared when they take an action
+    
     const { playerId: activeId, turnState } = ensureActiveTurn(game);
     if (activeId) {
       broadcastTurnState(game, activeId, turnState, 'SUGGESTION_REFUTED');

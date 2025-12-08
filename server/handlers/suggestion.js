@@ -34,7 +34,8 @@ const {
   moveSuspectToken,
   moveWeaponToken,
   inferZoneForLocation,
-  ensureActiveTurn
+  ensureActiveTurn,
+  areAllExitsBlocked
 } = require('../state/games');
 const { broadcastTurnState } = require('./turn');
 const T = require('../schema/types');
@@ -123,11 +124,23 @@ function handleMakeSuggestion(ws, env) {
     }, requestId));
   }
 
+  // Rule 6: Blocked Exits Rule - cannot make suggestion if all exits blocked
+  if (areAllExitsBlocked(game, roomId, player.id)) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'ALL_EXITS_BLOCKED',
+      message: 'All exits are blocked. You cannot make a suggestion, but you may make an accusation.'
+    }, requestId));
+  }
+
   // Move the suggested suspect's character (if any player is using them)
-  const characterName = SUSPECT_ID_TO_CHARACTER[suspectId];
+  // Use normalized ID for dictionary lookup (keys are lowercase)
+  const characterName = SUSPECT_ID_TO_CHARACTER[normalizedSuspectId];
   if (characterName) {
     Object.values(game.players || {}).forEach((p) => {
       if (p && p.characterId === characterName) {
+        // Rule 5A: Track that this player was moved by suggestion
+        // They will get choice to suggest or move when their turn comes
+        p.movedBySuggestion = true;
         p.position = {
           zone: inferZoneForLocation(roomId) || 'ROOM',
           id: roomId,
@@ -138,18 +151,20 @@ function handleMakeSuggestion(ws, env) {
   }
 
   // Move tokens into the suggested room within server state
-  moveSuspectToken(game, suspectId, roomId);
-  moveWeaponToken(game, weaponId, roomId);
+  // Use normalized IDs for consistent token storage (lowercase keys)
+  moveSuspectToken(game, normalizedSuspectId, roomId);
+  moveWeaponToken(game, normalizedWeaponId, roomId);
 
   // Build disprove order starting from next player
   const order = computeDisproveOrder(game, player.id);
 
   // Broadcast suggestion (room forced to player's current location)
+  // Use normalized IDs for consistent messaging
   broadcast(game, makeEnv(T.SUGGESTION_MADE, gameId, { 
     by: player.id,
     byName: player.name || player.id,
-    suspectId, 
-    weaponId, 
+    suspectId: normalizedSuspectId, 
+    weaponId: normalizedWeaponId, 
     roomId 
   }));
 
@@ -163,11 +178,23 @@ function handleMakeSuggestion(ws, env) {
     return;
   }
 
+  // Clear forced suggestion flags after making suggestion
+  if (game.turnState) {
+    game.turnState.mustSuggestAfterHallwayMove = false;
+    game.turnState.mustSuggestAfterSecretPassage = false;
+    // Clear suggestion movement flag if this was their choice after being moved
+    if (game.turnState.enteredRoomViaSuggestion || player.movedBySuggestion) {
+      game.turnState.enteredRoomViaSuggestion = false;
+      player.movedBySuggestion = false;
+    }
+  }
+
   // Store pending suggestion state for disproval sequence
+  // Use normalized IDs for consistent storage and lookups
   game.pendingSuggestion = {
     suggesterId: player.id,
-    suspectId,
-    weaponId,
+    suspectId: normalizedSuspectId,
+    weaponId: normalizedWeaponId,
     roomId,
     order,
     index: 0,

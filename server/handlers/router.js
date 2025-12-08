@@ -9,7 +9,6 @@ const { handleMakeSuggestion } = require('./suggestion');
 const { handleRespondDisprove } = require('./disprove');
 const { handleMakeAccusation } = require('./accusation');
 const { handleEndTurn } = require('./endTurn');
-const { handleRollDice } = require('./dice');
 const { handleReconnect } = require('./reconnect');
 const T = require('../schema/types');
 
@@ -24,7 +23,6 @@ const HANDLERS = Object.freeze({
   [T.RESPOND_DISPROVE]: handleRespondDisprove,
   [T.MAKE_ACCUSATION]: handleMakeAccusation,
   [T.END_TURN]: handleEndTurn,
-  [T.ROLL_DICE]: handleRollDice,
   [T.RECONNECT]: handleReconnect,
 });
 

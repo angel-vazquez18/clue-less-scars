@@ -5,7 +5,8 @@ const {
   getCurrentPlayer,
   markPlayerEliminated,
   advanceTurn,
-  evaluateGameStatus
+  evaluateGameStatus,
+  inferZoneForLocation
 } = require('../state/games');
 const { broadcastTurnState } = require('./turn');
 const T = require('../schema/types');
@@ -42,12 +43,16 @@ function handleMakeAccusation(ws, env) {
     }, requestId));
   }
 
-  if (game.pendingSuggestion) {
+  // Rule 1: Cannot make accusation while in hallway - must move to room first
+  if (player.position?.zone === 'HALLWAY') {
     return safe(ws, makeEnv(T.ERROR, gameId, {
-      code: 'SUGGESTION_PENDING',
-      message: 'Resolve the current suggestion before accusing'
+      code: 'CANNOT_ACCUSE_IN_HALLWAY',
+      message: 'You cannot make an accusation while in a hallway. You must move to a room first.'
     }, requestId));
   }
+
+  // Note: Accusations are allowed even during pending suggestions (Rule 5)
+  // The pendingSuggestion check is removed to allow accusations at any time during turn
 
   const { suspectId, weaponId, roomId } = payload || {};
   if (!suspectId || !weaponId || !roomId) {

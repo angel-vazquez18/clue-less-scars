@@ -96,7 +96,9 @@ const getCardDescription = (card) => {
 
 const formatPosition = (position, gameStarted) => {
   if (!position) {
-    return gameStarted ? "Not placed" : "Lobby";
+    // Before game starts, players are in lobby
+    // After game starts, positions should be assigned but show waiting if not set yet
+    return gameStarted ? "Starting position..." : "Lobby";
   }
   if (typeof position === "string") {
     return position;
@@ -118,17 +120,16 @@ const InfoPanel = ({
   refutePrompt,
   hand,
   knownCards,
+  revealedCards = [],
   solution,
   accusationResult,
   onPlayAgain,
-  onRollDice,
   showOnlyHand = false,
   hideHandAndReference = false,
 }) => {
   const [handFilter, setHandFilter] = useState("ALL");
   const [selectedCard, setSelectedCard] = useState(null);
   const [referenceFilter, setReferenceFilter] = useState("ALL");
-  const [isRolling, setIsRolling] = useState(false);
 
   if (!gameState) return null;
 
@@ -232,51 +233,6 @@ const InfoPanel = ({
     );
   };
 
-  const handleRollDice = () => {
-    if (isRolling || !onRollDice) return;
-    setIsRolling(true);
-    onRollDice();
-    // Reset rolling state after animation
-    setTimeout(() => setIsRolling(false), 1500);
-  };
-
-  const renderDiceRoll = () => {
-    const needsRoll = isMyTurn && gameStarted && gameState.turn?.diceRoll == null;
-    const hasRoll = gameState.turn?.diceRoll != null;
-    const movesAvailable = gameState.turn?.movementAllowance;
-
-    if (needsRoll) {
-      return (
-        <div className="info-item dice-roll-section">
-          <button
-            className={`dice-roll-btn ${isRolling ? 'rolling' : ''}`}
-            onClick={handleRollDice}
-            disabled={isRolling}
-            aria-label="Roll dice for movement"
-          >
-            <span className="dice-icon">🎲</span>
-            <span className="dice-text">
-              {isRolling ? 'Rolling...' : 'Roll Dice'}
-            </span>
-          </button>
-        </div>
-      );
-    }
-
-    if (hasRoll) {
-      return (
-        <div className="info-item dice-roll-result">
-          <strong>🎲 Dice Roll:</strong>{" "}
-          <span className="dice-value">{gameState.turn.diceRoll}</span>
-          {movesAvailable != null && (
-            <span className="moves-info"> ({movesAvailable} moves)</span>
-          )}
-        </div>
-      );
-    }
-
-    return null;
-  };
 
   const renderGameAndPlayerInfo = () => (
     <div className="panel-section">
@@ -289,19 +245,16 @@ const InfoPanel = ({
         <div className="info-item">
           <strong>Current Turn:</strong> {currentTurnName}
         </div>
-        {renderDiceRoll()}
-        <div className="info-item">
-          <strong>Moves Available:</strong>{" "}
-          {gameState.turn?.movementAllowance != null
-            ? gameState.turn.movementAllowance
-            : "—"}
-        </div>
-        <div className="info-item">
-          <strong>Moves Remaining:</strong>{" "}
-          {gameState.turn?.movesRemaining != null
-            ? gameState.turn.movesRemaining
-            : "—"}
-        </div>
+        {gameState.turn?.mustSuggest && (
+          <div className="info-item warning">
+            <strong>⚠️ Must Suggest:</strong> You must make a suggestion after your move.
+          </div>
+        )}
+        {gameState.turn?.hasMoved && (
+          <div className="info-item">
+            <strong>Status:</strong> Already moved this turn
+          </div>
+        )}
         <div className="info-item">
           <strong>Legal Moves:</strong>{" "}
           {gameState.turn?.legalMoves
@@ -445,6 +398,45 @@ const InfoPanel = ({
     );
   };
 
+  const renderRevealedCards = () => {
+    if (!gameStarted || !Array.isArray(revealedCards) || revealedCards.length === 0) {
+      return null;
+    }
+
+    const formatTimestamp = (timestamp) => {
+      try {
+        const date = new Date(timestamp);
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch {
+        return '';
+      }
+    };
+
+    return (
+      <div className="panel-section revealed-cards-section">
+        <h4>Revealed Cards Log</h4>
+        <div className="revealed-cards-list" role="list">
+          {revealedCards.map((entry, index) => (
+            <div key={index} className="revealed-card-entry" role="listitem">
+              <div className="revealed-card-header">
+                <span className="revealed-card-player">
+                  {entry.player}
+                  {entry.character && <span className="revealed-card-character"> ({entry.character})</span>}
+                </span>
+                {entry.timestamp && (
+                  <span className="revealed-card-time">{formatTimestamp(entry.timestamp)}</span>
+                )}
+              </div>
+              <div className="revealed-card-name">
+                {getCardDescription(entry.cardId || entry.card)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const renderReference = () => {
     const handleReferenceFilterChange = (filter) => {
       setReferenceFilter(filter);
@@ -522,17 +514,18 @@ const InfoPanel = ({
     );
   };
 
-  // If only showing hand, render just hand and reference
+  // If only showing hand, render just hand, reference, and revealed cards
   if (showOnlyHand) {
     return (
       <div className="info-panel">
         {renderHand()}
+        {renderRevealedCards()}
         {renderReference()}
       </div>
     );
   }
 
-  // If hiding hand and reference, exclude them from the panel
+  // If hiding hand and reference, exclude them from the panel but show revealed cards
   if (hideHandAndReference) {
     return (
       <div className="info-panel">
@@ -540,6 +533,7 @@ const InfoPanel = ({
         {renderAccusationBanner()}
         {renderSuggestionInfo()}
         {renderGameAndPlayerInfo()}
+        {renderRevealedCards()}
         {renderSolution()}
       </div>
     );
@@ -552,6 +546,7 @@ const InfoPanel = ({
       {renderSuggestionInfo()}
       {renderGameAndPlayerInfo()}
       {renderHand()}
+      {renderRevealedCards()}
       {renderSolution()}
       {renderReference()}
     </div>

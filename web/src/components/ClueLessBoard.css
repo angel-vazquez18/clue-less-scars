@@ -98,6 +98,8 @@
   text-align: center;
   padding: clamp(0.4rem, 0.9vw, 0.8rem);
   box-sizing: border-box;
+  /* Ensure tooltips can show even when child elements are hovered */
+  pointer-events: auto;
 }
 
 .cl-cell-room {
@@ -122,6 +124,8 @@
   color: #2e2413;
   text-transform: uppercase;
   line-height: 1.2;
+  /* Allow pointer events to pass through for tooltip */
+  pointer-events: none;
 }
 
 .cl-cell-hallway {
@@ -149,6 +153,8 @@
   font-weight: 600;
   color: rgba(45, 32, 17, 0.7);
   letter-spacing: 0.05em;
+  /* Allow pointer events to pass through for tooltip */
+  pointer-events: none;
 }
 
 .cl-cell-void {
@@ -238,6 +244,8 @@
   bottom: clamp(0.35rem, 0.9vw, 0.75rem);
   transform: translateX(-50%);
   max-width: 80%;
+  /* Allow pointer events to pass through to parent for tooltip */
+  pointer-events: none;
 }
 
 .cl-token {
@@ -245,6 +253,8 @@
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.35);
+  /* Re-enable pointer events for tokens so their own tooltips work */
+  pointer-events: auto;
 }
 
 .cl-token-player {
