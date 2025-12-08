@@ -1,4 +1,13 @@
 const { makeEnv } = require('../schema/envelope');
+const SUSPECT_ID_TO_CHARACTER = {
+  "suspect:scarlet": "Miss Scarlet",
+  "suspect:mustard": "Colonel Mustard",
+  "suspect:white": "Mrs. White",
+  "suspect:green": "Mr. Green",
+  "suspect:peacock": "Mrs. Peacock",
+  "suspect:plum": "Professor Plum",
+};
+
 const { broadcast, sendToPlayer } = require('../utils/send');
 const { 
   resolveGameAndPlayer, 
@@ -6,6 +15,7 @@ const {
   getCurrentPlayer,
   moveSuspectToken,
   moveWeaponToken,
+  inferZoneForLocation,
   ensureActiveTurn
 } = require('../state/games');
 const { broadcastTurnState } = require('./turn');
@@ -66,6 +76,20 @@ function handleMakeSuggestion(ws, env) {
   }
 
   const roomId = player.position.id;
+
+  // Move the suggested suspect's character (if any player is using them)
+  const characterName = SUSPECT_ID_TO_CHARACTER[suspectId];
+  if (characterName) {
+    Object.values(game.players || {}).forEach((p) => {
+      if (p && p.characterId === characterName) {
+        p.position = {
+          zone: inferZoneForLocation(roomId) || 'ROOM',
+          id: roomId,
+          secret: false,
+        };
+      }
+    });
+  }
 
   // Move tokens into the suggested room within server state
   moveSuspectToken(game, suspectId, roomId);

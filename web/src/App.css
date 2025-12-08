@@ -392,6 +392,12 @@
   border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
+.reference-item--in-hand {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+
 .info-stack .message-log {
   flex: 1;
   max-height: 45vh;
@@ -1327,5 +1333,126 @@
 
   .message-list {
     max-height: 200px;
+  }
+}
+
+
+/* Hand panel enhancements */
+.hand-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.hand-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.hand-filter-btn {
+  border-radius: 999px;
+  border: 1px solid #cbd5e0;
+  padding: 0.15rem 0.6rem;
+  background: #ffffff;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.hand-filter-btn--active {
+  background: #667eea;
+  color: #ffffff;
+  border-color: #667eea;
+}
+
+.hand-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+.hand-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #ffffff 0%, #f7fafc 100%);
+  text-align: left;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.hand-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.15);
+}
+
+.hand-card--selected {
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.4);
+}
+
+.hand-card--suspect {
+  border-left: 4px solid #e53935;
+}
+
+.hand-card--weapon {
+  border-left: 4px solid #8e24aa;
+}
+
+.hand-card--room {
+  border-left: 4px solid #1e88e5;
+}
+
+.hand-card-name {
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.hand-card-category {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #718096;
+}
+
+.hand-card-details {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #444;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e0;
+}
+
+/* Generic help text for forms/dialogs */
+.form-help-text {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0 0 0.75rem 0;
+}
+
+/* Improved focus outline */
+:focus-visible {
+  outline: 3px solid #ff9800;
+  outline-offset: 2px;
+}
+
+/* Respect prefers-reduced-motion for transitions/animations */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

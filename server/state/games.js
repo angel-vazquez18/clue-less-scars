@@ -35,9 +35,12 @@ const DEFAULT_MOVES_PER_TURN = 4;
 
 function inferZoneForLocation(locationId) {
   if (!locationId) return null;
-  return locationId.startsWith("H") || locationId.startsWith("V")
-    ? "HALLWAY"
-    : "ROOM";
+  const cells = BOARD_CONFIG.cells || [];
+  const cell = cells.find((c) => c.id === locationId);
+  if (!cell) return null;
+  if (cell.type === 'room') return 'ROOM';
+  if (cell.type === 'hallway') return 'HALLWAY';
+  return null;
 }
 
 const STARTING_POSITIONS = Object.freeze(
@@ -548,12 +551,18 @@ function playerHasCard(player, cardId) {
   return Array.isArray(player.hand) && player.hand.includes(cardId);
 }
 
+function normalizeCardKey(value) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/^[^:]+:/, '').toLowerCase().trim();
+}
+
 function isCardRelevantToSuggestion(cardId, suggestion) {
   if (!suggestion || !cardId) return false;
+  const key = normalizeCardKey(cardId);
   return (
-    cardId === suggestion.suspectId ||
-    cardId === suggestion.weaponId ||
-    cardId === suggestion.roomId
+    key === normalizeCardKey(suggestion.suspectId) ||
+    key === normalizeCardKey(suggestion.weaponId) ||
+    key === normalizeCardKey(suggestion.roomId)
   );
 }
 

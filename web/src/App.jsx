@@ -28,6 +28,7 @@ function App() {
   const [error, setError] = useState('');
   const [copySuccess, setCopySuccess] = useState(false);
   const [handCards, setHandCards] = useState([]);
+  const [seenCards, setSeenCards] = useState([]);
   const [isMyTurn, setIsMyTurn] = useState(false);
   const [awaitingDisprove, setAwaitingDisprove] = useState(false);
   const [refutePrompt, setRefutePrompt] = useState(null);
@@ -216,38 +217,43 @@ function App() {
           break;
         }
           
-        case 'PLAYER_MOVED':
-          addMessage(`Player moved to ${message.payload.to.zone} ${message.payload.to.id || ''}`.trim(), 'player-action');
-          if (message.payload.playerId) {
+        case 'PLAYER_MOVED': {
+          const { playerId, to, movesRemaining, movementAllowance, legalMoves } = message.payload;
+          addMessage(
+            `Player moved to ${to.zone} ${to.id || ''}`.trim(),
+            'player-action'
+          );
+          if (playerId) {
             setGameState(prev => {
               if (!prev) return prev;
               return {
                 ...prev,
                 players: prev.players.map(p =>
-                  p.id === message.payload.playerId
-                    ? { ...p, position: message.payload.to }
-                    : p
+                  p.id === playerId ? { ...p, position: to } : p
                 ),
                 turn: {
                   ...prev.turn,
-                  movesRemaining: message.payload.movesRemaining ?? prev.turn?.movesRemaining ?? null,
+                  movesRemaining: movesRemaining ?? prev.turn?.movesRemaining ?? null,
                   movementAllowance:
-                    message.payload.movementAllowance ?? prev.turn?.movementAllowance ?? null,
-                  legalMoves: Array.isArray(message.payload.legalMoves)
-                    ? message.payload.legalMoves
-                    : prev.turn?.legalMoves || []
+                    movementAllowance ?? prev.turn?.movementAllowance ?? null,
+                  legalMoves:
+                    Array.isArray(legalMoves) && legalMoves.length > 0
+                      ? legalMoves
+                      : prev.turn?.legalMoves || []
                 }
               };
             });
             setPlayers(prev =>
               prev.map(p =>
-                p.id === message.payload.playerId
-                  ? { ...p, position: message.payload.to }
-                  : p
+                p.id === playerId ? { ...p, position: to } : p
               )
+            );
+            setCurrentPlayer(prev =>
+              prev && prev.id === playerId ? { ...prev, position: to } : prev
             );
           }
           break;
+        }
           
         case 'SUGGESTION_MADE': {
           const { suspectId, weaponId, by } = message.payload;
@@ -291,14 +297,34 @@ function App() {
 
         case 'DISPROVE_RESULT':
           if (message.payload.disproverId) {
-            const personalCard = message.payload.cardId ? ` (card shown: ${message.payload.cardId})` : '';
-            addMessage(`Suggestion was disproved${personalCard}!`, 'player-action');
+            const personalCard = message.payload.cardId
+              ? ` (card shown: ${message.payload.cardId})`
+              : '';
+            addMessage(
+              `Suggestion was disproved${personalCard}!`,
+              'player-action'
+            );
+
+            // If this message includes the specific card shown to us,
+            // store it in seenCards so we can cross it off in Reference.
+            if (message.payload.cardId) {
+              setSeenCards((prev) =>
+                prev.includes(message.payload.cardId)
+                  ? prev
+                  : [...prev, message.payload.cardId]
+              );
+            }
           } else {
-            addMessage('No one could disprove the suggestion', 'player-action');
+            addMessage(
+              'No one could disprove the suggestion',
+              'player-action'
+            );
           }
           setAwaitingDisprove(false);
           setRefutePrompt(null);
-          setGameState(prev => prev ? { ...prev, pendingSuggestion: null } : prev);
+          setGameState((prev) =>
+            prev ? { ...prev, pendingSuggestion: null } : prev
+          );
           break;
           
         case 'ACCUSATION_RESOLVED': {
@@ -366,9 +392,18 @@ function App() {
           break;
           
         case 'YOUR_HAND': {
-          const cards = Array.isArray(message.payload.cards) ? message.payload.cards : [];
+          const cards = Array.isArray(message.payload.cards)
+            ? message.payload.cards
+            : [];
           setHandCards(cards);
-          addMessage(`Your hand contains ${cards.length} card${cards.length === 1 ? '' : 's'}.`, 'hand');
+          // Reset seen cards when receiving a fresh hand (e.g., new game)
+          setSeenCards([]);
+          addMessage(
+            `Your hand contains ${cards.length} card${
+              cards.length === 1 ? '' : 's'
+            }.`,
+            'hand'
+          );
           break;
         }
           
@@ -584,7 +619,7 @@ function App() {
         </div>
       </header>
 
-      <main className="app-main">
+      <main className="app-main" role="main">
         {showJoinForm ? (
           <div className="join-form">
             <h2>Join Game</h2>
@@ -663,6 +698,7 @@ function App() {
                   awaitingDisprove={awaitingDisprove}
                   refutePrompt={refutePrompt}
                   hand={handCards}
+                  knownCards={seenCards}
                   solution={revealedSolution}
                   accusationResult={accusationResult}
                   onPlayAgain={handlePlayAgain}

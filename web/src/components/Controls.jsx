@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 const SUSPECTS = [
   "Miss Scarlet",
@@ -30,6 +30,70 @@ const ROOMS = [
   "Study",
 ];
 
+const suspectNameToId = (name) => {
+  switch (name) {
+    case "Miss Scarlet":
+      return "suspect:scarlet";
+    case "Colonel Mustard":
+      return "suspect:mustard";
+    case "Mrs. White":
+      return "suspect:white";
+    case "Mr. Green":
+      return "suspect:green";
+    case "Mrs. Peacock":
+      return "suspect:peacock";
+    case "Professor Plum":
+      return "suspect:plum";
+    default:
+      return name;
+  }
+};
+
+const weaponNameToId = (name) => {
+  switch (name) {
+    case "Candlestick":
+      return "weapon:candlestick";
+    case "Knife":
+      return "weapon:knife";
+    case "Lead Pipe":
+      return "weapon:leadpipe";
+    case "Revolver":
+      return "weapon:revolver";
+    case "Rope":
+      return "weapon:rope";
+    case "Wrench":
+      return "weapon:wrench";
+    default:
+      return name;
+  }
+};
+
+const roomNameToId = (name) => {
+  switch (name) {
+    case "Kitchen":
+      return "room:kitchen";
+    case "Ballroom":
+      return "room:ballroom";
+    case "Conservatory":
+      return "room:conservatory";
+    case "Dining Room":
+      return "room:dining";
+    case "Billiard Room":
+      return "room:billiard";
+    case "Library":
+      return "room:library";
+    case "Lounge":
+      return "room:lounge";
+    case "Hall":
+      return "room:hall";
+    case "Study":
+      return "room:study";
+    default:
+      return name;
+  }
+};
+
+
 const SECRET_PASSAGES = {
   Study: "Kitchen",
   Kitchen: "Study",
@@ -37,10 +101,17 @@ const SECRET_PASSAGES = {
   Conservatory: "Lounge",
 };
 
+const stripPrefix = (value) =>
+  typeof value === "string" ? value.replace(/^[^:]+:/, "") : value;
+
+const normalizeCardKey = (value) =>
+  typeof value === "string"
+    ? stripPrefix(value).toLowerCase().trim()
+    : "";
+
 const isHallway = (locationId) =>
   typeof locationId === "string" &&
-  locationId.includes("-") &&
-  (locationId.startsWith("H") || locationId.startsWith("V"));
+  (/^H\d/.test(locationId) || /^V\d/.test(locationId));
 
 const formatLocationLabel = (locationId) => {
   if (!locationId) return "Unknown";
@@ -91,6 +162,26 @@ const Controls = ({
     refutePrompt &&
     refutePrompt.nextPlayerId === currentPlayer?.id;
 
+  const primaryActionRef = useRef(null);
+  const disproveSelectRef = useRef(null);
+
+  const matchingDisproveCards = useMemo(() => {
+    if (!Array.isArray(hand) || !refutePrompt) return [];
+
+    const { suspectId, weaponId, roomId } = refutePrompt;
+
+    // Normalize suggestion ids and compare to normalized hand card ids
+    const wanted = new Set(
+      [suspectId, weaponId, roomId]
+        .filter(Boolean)
+        .map((v) => normalizeCardKey(v))
+    );
+
+    return hand.filter((card) => wanted.has(normalizeCardKey(card)));
+  }, [hand, refutePrompt]);
+
+  const canDisprove = matchingDisproveCards.length > 0;
+
   useEffect(() => {
     if (!canMove) {
       setShowMoveForm(false);
@@ -102,6 +193,56 @@ const Controls = ({
       setShowAccusationForm(false);
     }
   }, [canMove, canSuggest, canAccuse]);
+
+  useEffect(() => {
+    if (canAct && isMyTurn && primaryActionRef.current) {
+      primaryActionRef.current.focus();
+    }
+  }, [canAct, isMyTurn]);
+
+  useEffect(() => {
+    if (pendingDisproveForMe && disproveSelectRef.current) {
+      disproveSelectRef.current.focus();
+    }
+  }, [pendingDisproveForMe]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (!canAct || !isMyTurn) return;
+      if (event.defaultPrevented) return;
+
+      const key = event.key.toLowerCase();
+      switch (key) {
+        case "m":
+          if (canMove) {
+            setShowMoveForm(true);
+            event.preventDefault();
+          }
+          break;
+        case "s":
+          if (canSuggest) {
+            setShowSuggestionForm(true);
+            event.preventDefault();
+          }
+          break;
+        case "a":
+          if (canAccuse) {
+            setShowAccusationForm(true);
+            event.preventDefault();
+          }
+          break;
+        case "e":
+          onEndTurn();
+          event.preventDefault();
+          break;
+        default:
+          break;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canAct, canMove, canSuggest, canAccuse, isMyTurn, onEndTurn]);
 
   const handleMove = (e) => {
     e.preventDefault();
@@ -118,8 +259,10 @@ const Controls = ({
   const handleSuggestion = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const suspectId = formData.get("suspectId");
-    const weaponId = formData.get("weaponId");
+    const suspectName = formData.get("suspectId");
+    const weaponName = formData.get("weaponId");
+    const suspectId = suspectName ? suspectNameToId(suspectName) : null;
+    const weaponId = weaponName ? weaponNameToId(weaponName) : null;
     onSuggestion(suspectId, weaponId);
     setShowSuggestionForm(false);
   };
@@ -127,9 +270,12 @@ const Controls = ({
   const handleAccusation = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
-    const suspectId = formData.get("suspectId");
-    const weaponId = formData.get("weaponId");
-    const roomId = formData.get("roomId");
+    const suspectName = formData.get("suspectId");
+    const weaponName = formData.get("weaponId");
+    const roomName = formData.get("roomId");
+    const suspectId = suspectName ? suspectNameToId(suspectName) : null;
+    const weaponId = weaponName ? weaponNameToId(weaponName) : null;
+    const roomId = roomName ? roomNameToId(roomName) : null;
     onAccusation(suspectId, weaponId, roomId);
     setShowAccusationForm(false);
   };
@@ -138,6 +284,12 @@ const Controls = ({
     e.preventDefault();
     const formData = new FormData(e.target);
     const cardId = formData.get("cardId");
+
+    if (canDisprove && !cardId) {
+      // You must choose a card if you have one that can disprove
+      return;
+    }
+
     onDisprove(cardId || null);
   };
 
@@ -165,8 +317,6 @@ const Controls = ({
       </div>
     );
   };
-
-  const disproveCards = Array.isArray(hand) ? hand : [];
 
   return (
     <div className="controls">
@@ -201,6 +351,7 @@ const Controls = ({
           <h4>Game Actions</h4>
 
           <button
+            ref={primaryActionRef}
             onClick={() => setShowMoveForm(!showMoveForm)}
             className="control-btn move-btn"
             disabled={!canMove}
@@ -325,22 +476,51 @@ const Controls = ({
       )}
 
       {pendingDisproveForMe && (
-        <div className="control-form">
-          <h4>Respond to Suggestion</h4>
+        <div
+          className="control-form"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="disprove-title"
+        >
+          <h4 id="disprove-title">Respond to Suggestion</h4>
+          {refutePrompt && (
+            <p className="form-help-text">
+              The suggestion you are responding to is{" "}
+              <strong>{stripPrefix(refutePrompt.suspectId)}</strong> with{" "}
+              <strong>{stripPrefix(refutePrompt.weaponId)}</strong> in{" "}
+              <strong>{stripPrefix(refutePrompt.roomId)}</strong>.
+            </p>
+          )}
           <form onSubmit={handleDisprove}>
-            <div className="form-group">
-              <label>Choose a card to show (optional):</label>
-              <select name="cardId">
-                <option value="">Pass (no matching card)</option>
-                {disproveCards.map((card) => (
-                  <option key={card} value={card}>
-                    {card}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {canDisprove ? (
+              <div className="form-group">
+                <label htmlFor="disprove-card-select">
+                  Choose a card to show to disprove this suggestion:
+                </label>
+                <select
+                  id="disprove-card-select"
+                  name="cardId"
+                  ref={disproveSelectRef}
+                  required
+                >
+                  <option value="">Select a matching card</option>
+                  {matchingDisproveCards.map((card) => (
+                    <option key={card} value={card}>
+                      {stripPrefix(card)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <p className="form-help-text">
+                You do not have any cards that can disprove this suggestion.
+                Submit to pass.
+              </p>
+            )}
             <div className="form-actions">
-              <button type="submit">Respond</button>
+              <button type="submit">
+                {canDisprove ? "Show Card" : "Pass"}
+              </button>
             </div>
           </form>
         </div>
