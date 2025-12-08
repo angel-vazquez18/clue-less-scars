@@ -263,12 +263,6 @@ const Controls = ({
                             {formatLocationLabel(locationId)}
                           </option>
                         ))}
-                  {console.log(
-                    "does not start wtih hallway: ",
-                    !isHallway(legalMoveOptions[0]),
-                    "first move option: ",
-                    legalMoveOptions[0]
-                  )}
                 </select>
               </div>
               <div className="form-actions">
