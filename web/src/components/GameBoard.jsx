@@ -1,7 +1,11 @@
 import React, { useMemo } from "react";
 import ClueLessBoard, { sampleBoardConfig } from "./ClueLessBoard";
 
-const GameBoard = ({ gameState, gameStarted }) => {
+const GameBoard = ({ 
+  gameState, 
+  gameStarted,
+  players = [],
+}) => {
   const boardConfig = gameState?.board?.config || sampleBoardConfig;
   const positions = useMemo(
     () => ({ ...(boardConfig?.startingPositions || {}) }),
@@ -11,7 +15,6 @@ const GameBoard = ({ gameState, gameStarted }) => {
   if (!gameState) {
     return (
       <div className="game-board">
-        <h3>Game Board</h3>
         <div className="board-placeholder">
           <p>Waiting for game state…</p>
         </div>
@@ -21,12 +24,18 @@ const GameBoard = ({ gameState, gameStarted }) => {
 
   return (
     <div className="game-board">
-      <h3>Game Board</h3>
       {!gameStarted && (
         <div className="board-overlay">
           <div className="lobby-message">
             <h4>Waiting for Game to Start</h4>
-            <p>Players are selecting characters and preparing to start the game.</p>
+            {players.length < 4 ? (
+              <>
+                <p>Waiting for more players to join...</p>
+                <p>Need at least 4 players to start (max 6)</p>
+              </>
+            ) : (
+              <p>Players are selecting characters and preparing to start the game.</p>
+            )}
           </div>
         </div>
       )}

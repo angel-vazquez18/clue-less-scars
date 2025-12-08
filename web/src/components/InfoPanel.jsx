@@ -121,9 +121,14 @@ const InfoPanel = ({
   solution,
   accusationResult,
   onPlayAgain,
+  onRollDice,
+  showOnlyHand = false,
+  hideHandAndReference = false,
 }) => {
   const [handFilter, setHandFilter] = useState("ALL");
   const [selectedCard, setSelectedCard] = useState(null);
+  const [referenceFilter, setReferenceFilter] = useState("ALL");
+  const [isRolling, setIsRolling] = useState(false);
 
   if (!gameState) return null;
 
@@ -227,16 +232,64 @@ const InfoPanel = ({
     );
   };
 
-  const renderGameInfo = () => (
+  const handleRollDice = () => {
+    if (isRolling || !onRollDice) return;
+    setIsRolling(true);
+    onRollDice();
+    // Reset rolling state after animation
+    setTimeout(() => setIsRolling(false), 1500);
+  };
+
+  const renderDiceRoll = () => {
+    const needsRoll = isMyTurn && gameStarted && gameState.turn?.diceRoll == null;
+    const hasRoll = gameState.turn?.diceRoll != null;
+    const movesAvailable = gameState.turn?.movementAllowance;
+
+    if (needsRoll) {
+      return (
+        <div className="info-item dice-roll-section">
+          <button
+            className={`dice-roll-btn ${isRolling ? 'rolling' : ''}`}
+            onClick={handleRollDice}
+            disabled={isRolling}
+            aria-label="Roll dice for movement"
+          >
+            <span className="dice-icon">🎲</span>
+            <span className="dice-text">
+              {isRolling ? 'Rolling...' : 'Roll Dice'}
+            </span>
+          </button>
+        </div>
+      );
+    }
+
+    if (hasRoll) {
+      return (
+        <div className="info-item dice-roll-result">
+          <strong>🎲 Dice Roll:</strong>{" "}
+          <span className="dice-value">{gameState.turn.diceRoll}</span>
+          {movesAvailable != null && (
+            <span className="moves-info"> ({movesAvailable} moves)</span>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const renderGameAndPlayerInfo = () => (
     <div className="panel-section">
-      <h4>Game Information</h4>
+      <h4>Game & Player Information</h4>
       <div className="info-grid">
+        {/* Game State */}
         <div className="info-item">
           <strong>Phase:</strong> {gameState.turn?.phase || "Lobby"}
         </div>
         <div className="info-item">
           <strong>Current Turn:</strong> {currentTurnName}
         </div>
+        {renderDiceRoll()}
         <div className="info-item">
           <strong>Moves Available:</strong>{" "}
           {gameState.turn?.movementAllowance != null
@@ -259,35 +312,33 @@ const InfoPanel = ({
           <strong>Turn Order:</strong>{" "}
           {gameState.turn?.order?.length || 0} players
         </div>
+        
+        {/* Player Information */}
+        {currentPlayer && (
+          <>
+            <div className="info-item info-divider">
+              <strong>Your Info</strong>
+            </div>
+            <div className="info-item">
+              <strong>Name:</strong> {currentPlayer.name}
+            </div>
+            <div className="info-item">
+              <strong>Character:</strong>{" "}
+              {currentPlayer.characterId || "Not selected"}
+            </div>
+            <div className="info-item">
+              <strong>Status:</strong>{" "}
+              {currentPlayer.eliminated ? "Eliminated" : "Active"}
+            </div>
+            <div className="info-item">
+              <strong>Position:</strong>{" "}
+              {formatPosition(currentPlayer.position, gameStarted)}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
-
-  const renderCurrentPlayerInfo = () => {
-    if (!currentPlayer) return null;
-    return (
-      <div className="panel-section">
-        <h4>Your Information</h4>
-        <div className="player-details">
-          <div>
-            <strong>Name:</strong> {currentPlayer.name}
-          </div>
-          <div>
-            <strong>Character:</strong>{" "}
-            {currentPlayer.characterId || "Not selected"}
-          </div>
-          <div>
-            <strong>Status:</strong>{" "}
-            {currentPlayer.eliminated ? "Eliminated" : "Active"}
-          </div>
-          <div>
-            <strong>Position:</strong>{" "}
-            {formatPosition(currentPlayer.position, gameStarted)}
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   const renderHand = () => {
     if (!Array.isArray(hand)) return null;
@@ -394,75 +445,112 @@ const InfoPanel = ({
     );
   };
 
-  const renderReference = () => (
-    <div className="panel-section game-reference">
-      <h4>Reference</h4>
-      <div className="reference-sections">
-        <div className="reference-section">
-          <h5>Suspects</h5>
-          <div className="reference-list">
-            {SUSPECTS.map((suspect) => {
-              const inHand = hasCardInHand("SUSPECT", suspect);
-              return (
-                <span
-                  key={suspect}
-                  className={`reference-item${
-                    inHand ? " reference-item--in-hand" : ""
-                  }`}
-                >
-                  {suspect}
-                </span>
-              );
-            })}
+  const renderReference = () => {
+    const handleReferenceFilterChange = (filter) => {
+      setReferenceFilter(filter);
+    };
+
+    const getReferenceItems = () => {
+      switch (referenceFilter) {
+        case "SUSPECT":
+          return SUSPECTS.map(item => ({ name: item, category: "SUSPECT" }));
+        case "WEAPON":
+          return WEAPONS.map(item => ({ name: item, category: "WEAPON" }));
+        case "ROOM":
+          return ROOMS.map(item => ({ name: item, category: "ROOM" }));
+        default:
+          return [
+            ...SUSPECTS.map(item => ({ name: item, category: "SUSPECT" })),
+            ...WEAPONS.map(item => ({ name: item, category: "WEAPON" })),
+            ...ROOMS.map(item => ({ name: item, category: "ROOM" }))
+          ];
+      }
+    };
+
+    const filteredItems = getReferenceItems();
+
+    return (
+      <div className="panel-section hand-panel reference-panel">
+        <div className="hand-header">
+          <h4>Reference</h4>
+          <div
+            className="hand-filters"
+            role="radiogroup"
+            aria-label="Filter reference by type"
+          >
+            {["ALL", "SUSPECT", "WEAPON", "ROOM"].map((filter) => (
+              <button
+                key={filter}
+                type="button"
+                className={`hand-filter-btn${
+                  referenceFilter === filter ? " hand-filter-btn--active" : ""
+                }`}
+                onClick={() => handleReferenceFilterChange(filter)}
+                aria-pressed={referenceFilter === filter}
+              >
+                {filter === "ALL"
+                  ? "All"
+                  : filter.charAt(0) + filter.slice(1).toLowerCase() + "s"}
+              </button>
+            ))}
           </div>
         </div>
-        <div className="reference-section">
-          <h5>Weapons</h5>
-          <div className="reference-list">
-            {WEAPONS.map((weapon) => {
-              const inHand = hasCardInHand("WEAPON", weapon);
-              return (
-                <span
-                  key={weapon}
-                  className={`reference-item${
-                    inHand ? " reference-item--in-hand" : ""
-                  }`}
-                >
-                  {weapon}
+
+        <div className="hand-cards reference-cards" role="list">
+          {filteredItems.map((item) => {
+            const inHand = hasCardInHand(item.category, item.name);
+            return (
+              <button
+                key={`${item.category}-${item.name}`}
+                type="button"
+                className={`hand-card hand-card--${item.category.toLowerCase()}${
+                  inHand ? " hand-card--in-hand" : ""
+                }`}
+                role="listitem"
+                aria-label={item.name}
+                title={item.name}
+              >
+                <span className="hand-card-name">{item.name}</span>
+                <span className="hand-card-category">
+                  {item.category.toLowerCase()}
                 </span>
-              );
-            })}
-          </div>
-        </div>
-        <div className="reference-section">
-          <h5>Rooms</h5>
-          <div className="reference-list">
-            {ROOMS.map((room) => {
-              const inHand = hasCardInHand("ROOM", room);
-              return (
-                <span
-                  key={room}
-                  className={`reference-item${
-                    inHand ? " reference-item--in-hand" : ""
-                  }`}
-                >
-                  {room}
-                </span>
-              );
-            })}
-          </div>
+              </button>
+            );
+          })}
         </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  // If only showing hand, render just hand and reference
+  if (showOnlyHand) {
+    return (
+      <div className="info-panel">
+        {renderHand()}
+        {renderReference()}
+      </div>
+    );
+  }
+
+  // If hiding hand and reference, exclude them from the panel
+  if (hideHandAndReference) {
+    return (
+      <div className="info-panel">
+        {renderTurnBanner()}
+        {renderAccusationBanner()}
+        {renderSuggestionInfo()}
+        {renderGameAndPlayerInfo()}
+        {renderSolution()}
+      </div>
+    );
+  }
 
   return (
     <div className="info-panel">
       {renderTurnBanner()}
       {renderAccusationBanner()}
       {renderSuggestionInfo()}
-      {renderGameInfo()}
-      {renderCurrentPlayerInfo()}
+      {renderGameAndPlayerInfo()}
       {renderHand()}
       {renderSolution()}
       {renderReference()}

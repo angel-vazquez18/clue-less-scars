@@ -8,8 +8,11 @@ const {
   areAdjacentLocations,
   isSecretPassageMove,
   inferZoneForLocation,
-  updateLegalMoves
+  updateLegalMoves,
+  advanceTurn,
+  evaluateGameStatus
 } = require('../state/games');
+const { broadcastTurnState } = require('./turn');
 const T = require('../schema/types');
 
 function handleRequestMove(ws, env) {
@@ -46,7 +49,22 @@ function handleRequestMove(ws, env) {
   }
 
   const turnState = ensureTurnMoveState(game);
-  if (!turnState || turnState.movesRemaining <= 0) {
+  if (!turnState) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'NO_TURN_STATE',
+      message: 'Turn state not available'
+    }, requestId));
+  }
+
+  // Check if dice has been rolled
+  if (turnState.diceRoll == null) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'DICE_NOT_ROLLED',
+      message: 'You must roll the dice before moving'
+    }, requestId));
+  }
+
+  if (turnState.movesRemaining <= 0) {
     return safe(ws, makeEnv(T.ERROR, gameId, {
       code: 'NO_MOVES_LEFT',
       message: 'No movement points remaining this turn'
@@ -166,6 +184,39 @@ function handleRequestMove(ws, env) {
     movementAllowance: turnState.movementAllowance,
     legalMoves
   }));
+
+  // Auto-advance turn if player has no moves left and can't do anything else
+  if (turnState.movesRemaining === 0 && !game.pendingSuggestion) {
+    const playerZone = inferZoneForLocation(player.position.id);
+    const canSuggest = playerZone === 'ROOM';
+    
+    // If player can't suggest (not in room) and has no moves, auto-advance turn
+    if (!canSuggest) {
+      const status = evaluateGameStatus(game);
+      if (status.ended) {
+        game.started = false;
+        game.ended = true;
+        game.winnerId = status.winnerId;
+        game.turnState = null;
+        game.currentPlayerId = null;
+        broadcast(game, makeEnv(T.GAME_OVER, gameId, {
+          winnerId: status.winnerId,
+          solution: game.solution,
+          reason: status.reason
+        }));
+        return;
+      }
+
+      const { playerId: nextPlayerId, turnState: nextTurnState } = advanceTurn(game);
+      if (nextPlayerId) {
+        const previousPlayerName = player.name || player.id;
+        broadcast(game, makeEnv(T.INFO, gameId, {
+          message: `${previousPlayerName} ran out of moves and their turn ended automatically.`
+        }));
+        broadcastTurnState(game, nextPlayerId, nextTurnState, 'TURN_AUTO_ADVANCED');
+      }
+    }
+  }
 }
 
 function safe(ws, msg) { 

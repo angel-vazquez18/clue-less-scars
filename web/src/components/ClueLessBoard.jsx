@@ -199,6 +199,8 @@ const ClueLessBoard = ({
     return grouped;
   }, [gameState?.board?.weaponTokens]);
 
+  // Board now fills available space via CSS, no need for manual sizing
+
   if (!boardMetrics.columns || !boardMetrics.rows) {
     return null;
   }
@@ -209,7 +211,9 @@ const ClueLessBoard = ({
       role="region"
       aria-label="Clue-Less game board"
     >
-      <div className="cl-board-container">
+      <div 
+        className="cl-board-container"
+      >
         <div
           className="cl-board-grid"
           role="grid"

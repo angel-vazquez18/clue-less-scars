@@ -10,6 +10,7 @@ function buildTurnPayload(game, currentPlayerId, turnState, reason) {
     order: game.turnOrder,
     movementAllowance: turnState?.movementAllowance ?? null,
     movesRemaining: turnState?.movesRemaining ?? null,
+    diceRoll: turnState?.diceRoll ?? null,
     legalMoves: turnState?.legalMoves ?? []
   };
   if (reason) {
@@ -53,7 +54,9 @@ function broadcastTurnState(game, currentPlayerId, turnState, reason) {
     playerName: currentPlayer?.name || 'Unknown',
     movementAllowance: turnState?.movementAllowance ?? null,
     movesRemaining: turnState?.movesRemaining ?? null,
-    legalMoves: turnState?.legalMoves ?? []
+    diceRoll: turnState?.diceRoll ?? null,
+    legalMoves: turnState?.legalMoves ?? [],
+    autoAdvanced: reason === 'TURN_AUTO_ADVANCED'
   };
   if (reason) {
     payload.reason = reason;

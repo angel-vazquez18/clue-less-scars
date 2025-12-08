@@ -85,6 +85,12 @@ function handleRespondDisprove(ws, env) {
     return;
   }
 
+  // Broadcast updated game state so all clients have the correct pendingSuggestion with updated index
+  const { playerId: activeId, turnState } = ensureActiveTurn(game);
+  if (activeId) {
+    broadcastTurnState(game, activeId, turnState, 'DISPROVE_PASSED');
+  }
+
   promptNextDisprover(game);
 }
 

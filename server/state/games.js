@@ -3,6 +3,16 @@ const { v4: uuidv4 } = require("uuid");
 const BOARD_CONFIG = require("../data/boardConfig.json");
 
 // ---- Minimal dealing & envelope (Clue-Less) ----
+// Canonical Clue character sequence for turn order (official rules)
+const CANONICAL_CHARACTER_ORDER = Object.freeze([
+  "Miss Scarlet",
+  "Colonel Mustard",
+  "Mrs. White",
+  "Mr. Green",
+  "Mrs. Peacock",
+  "Professor Plum",
+]);
+
 const SUSPECTS = [
   "Colonel Mustard",
   "Professor Plum",
@@ -31,7 +41,17 @@ const ROOMS = [
   "Study",
 ];
 
-const DEFAULT_MOVES_PER_TURN = 4;
+const DEFAULT_MOVES_PER_TURN = 4; // Fallback only - should use dice roll
+
+/**
+ * Roll 2 six-sided dice for movement allowance (Clue rules)
+ * Returns a value between 2 and 12
+ */
+function rollDice() {
+  const die1 = Math.floor(Math.random() * 6) + 1;
+  const die2 = Math.floor(Math.random() * 6) + 1;
+  return die1 + die2;
+}
 
 function inferZoneForLocation(locationId) {
   if (!locationId) return null;
@@ -402,17 +422,64 @@ function ensureTurnMoveState(game) {
   }
 
   if (!game.turnState || game.turnState.playerId !== currentPlayerId) {
+    // Initialize turn state without dice roll - player must roll manually
     game.turnState = {
       playerId: currentPlayerId,
-      movementAllowance: DEFAULT_MOVES_PER_TURN,
-      movesRemaining: DEFAULT_MOVES_PER_TURN,
+      diceRoll: null,
+      movementAllowance: null,
+      movesRemaining: null,
       secretPassageUsed: false,
       legalMoves: [],
     };
   }
 
-  updateLegalMoves(game);
+  // Only update legal moves if dice has been rolled
+  if (game.turnState.diceRoll != null) {
+    updateLegalMoves(game);
+  }
+  
   return game.turnState;
+}
+
+/**
+ * Establishes turn order based on the canonical Clue character sequence.
+ * Turn order follows: Miss Scarlet → Colonel Mustard → Mrs. White → 
+ * Mr. Green → Mrs. Peacock → Professor Plum
+ * 
+ * If Miss Scarlet is not selected, the first selected character in the 
+ * canonical sequence becomes the starting player.
+ * 
+ * Only players who have selected characters are included in the turn order.
+ * 
+ * @param {Object} game - The game object
+ * @returns {Array<string>} Ordered array of player IDs
+ */
+function establishTurnOrder(game) {
+  if (!game || !game.players) return [];
+  
+  // Get all players who have selected characters
+  const playersWithCharacters = Object.values(game.players).filter(
+    p => p && p.characterId && !p.eliminated
+  );
+  
+  if (playersWithCharacters.length === 0) return [];
+  
+  // Create a map of characterId -> player for quick lookup
+  const characterToPlayer = new Map();
+  playersWithCharacters.forEach(player => {
+    characterToPlayer.set(player.characterId, player);
+  });
+  
+  // Build turn order following canonical sequence
+  const orderedPlayerIds = [];
+  for (const character of CANONICAL_CHARACTER_ORDER) {
+    const player = characterToPlayer.get(character);
+    if (player) {
+      orderedPlayerIds.push(player.id);
+    }
+  }
+  
+  return orderedPlayerIds;
 }
 
 function assignStartingPositions(game) {
@@ -434,16 +501,34 @@ function startGame(game) {
   const playerCount = Object.keys(game.players).length;
   if (playerCount < 4) return false;
 
+  // Verify all players have selected characters
+  const playersWithoutCharacters = Object.values(game.players).filter(
+    p => !p.characterId
+  );
+  if (playersWithoutCharacters.length > 0) {
+    return false;
+  }
+
   if (!game.dealt) {
     makeEnvelopeAndDeal(game);
   }
 
   assignStartingPositions(game);
+  
+  // Establish turn order based on canonical character sequence
+  game.turnOrder = establishTurnOrder(game);
+  if (game.turnOrder.length === 0) {
+    return false;
+  }
+  
+  // Set turn index to -1 so nextTurn will select the first player (index 0)
+  // This ensures Miss Scarlet (or first in canonical sequence) goes first
   game.turnIndex = -1;
   game.currentPlayerId = null;
   game.turnState = null;
   game.ended = false;
   game.winnerId = null;
+  
   const firstPlayerId = nextTurn(game); // establish first active player
   if (!firstPlayerId) {
     game.started = false;
@@ -524,7 +609,11 @@ function computeDisproveOrder(game, fromPlayerId) {
   const n = game.turnOrder.length;
   for (let i = 1; i < n; i++) {
     const pid = game.turnOrder[(idx + i) % n];
-    order.push(pid);
+    const player = game.players[pid];
+    // Exclude eliminated players from disprove order (official Clue rules)
+    if (player && !player.eliminated) {
+      order.push(pid);
+    }
   }
   return order;
 }
@@ -645,4 +734,5 @@ module.exports = {
   advanceTurn,
   evaluateGameStatus,
   updateLegalMoves,
+  rollDice,
 };

@@ -8,6 +8,24 @@ const SUSPECT_ID_TO_CHARACTER = {
   "suspect:plum": "Professor Plum",
 };
 
+// Valid suspect and weapon IDs for validation
+const VALID_SUSPECT_IDS = Object.keys(SUSPECT_ID_TO_CHARACTER);
+const VALID_WEAPON_IDS = [
+  "weapon:candlestick",
+  "weapon:knife",
+  "weapon:leadpipe",
+  "weapon:revolver",
+  "weapon:rope",
+  "weapon:wrench",
+  // Also accept weapon names without prefix for compatibility
+  "Candlestick",
+  "Knife",
+  "Leadpipe",
+  "Revolver",
+  "Rope",
+  "Wrench",
+];
+
 const { broadcast, sendToPlayer } = require('../utils/send');
 const { 
   resolveGameAndPlayer, 
@@ -67,7 +85,7 @@ function handleMakeSuggestion(ws, env) {
     }, requestId));
   }
 
-  const { suspectId, weaponId } = payload || {};
+  const { suspectId, weaponId, roomId: payloadRoomId } = payload || {};
   if (!suspectId || !weaponId) {
     return safe(ws, makeEnv(T.ERROR, gameId, { 
       code: 'INVALID_SUGGESTION', 
@@ -75,7 +93,35 @@ function handleMakeSuggestion(ws, env) {
     }, requestId));
   }
 
+  // Validate suspect and weapon IDs (case-insensitive for robustness)
+  const normalizeId = (id) => typeof id === 'string' ? id.toLowerCase().trim() : '';
+  const normalizedSuspectId = normalizeId(suspectId);
+  const normalizedWeaponId = normalizeId(weaponId);
+  
+  const isValidSuspect = VALID_SUSPECT_IDS.some(valid => normalizeId(valid) === normalizedSuspectId);
+  if (!isValidSuspect) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'INVALID_SUSPECT',
+      message: 'Invalid suspect ID'
+    }, requestId));
+  }
+
+  const isValidWeapon = VALID_WEAPON_IDS.some(valid => normalizeId(valid) === normalizedWeaponId);
+  if (!isValidWeapon) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'INVALID_WEAPON',
+      message: 'Invalid weapon ID'
+    }, requestId));
+  }
+
+  // Room ID must match player's current room (official Clue rules)
   const roomId = player.position.id;
+  if (payloadRoomId && payloadRoomId !== roomId) {
+    return safe(ws, makeEnv(T.ERROR, gameId, {
+      code: 'ROOM_MISMATCH',
+      message: 'Suggestion room must match your current room'
+    }, requestId));
+  }
 
   // Move the suggested suspect's character (if any player is using them)
   const characterName = SUSPECT_ID_TO_CHARACTER[suspectId];
@@ -100,7 +146,8 @@ function handleMakeSuggestion(ws, env) {
 
   // Broadcast suggestion (room forced to player's current location)
   broadcast(game, makeEnv(T.SUGGESTION_MADE, gameId, { 
-    by: player.id, 
+    by: player.id,
+    byName: player.name || player.id,
     suspectId, 
     weaponId, 
     roomId 
@@ -148,7 +195,8 @@ function promptNextDisprover(game) {
       roomId: pending.roomId
     },
     nextPlayerId,
-    order: pending.order
+    order: pending.order,
+    index: pending.index  // Include index so client can match server's check
   };
 
   sendToPlayer(game, pending.suggesterId, T.PROMPT_DISPROVE, payload);

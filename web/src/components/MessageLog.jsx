@@ -19,6 +19,8 @@ const MessageLog = ({ messages }) => {
         return 'message-player-action';
       case 'turn':
         return 'message-turn';
+      case 'turn-auto':
+        return 'message-turn-auto';
       case 'game-over':
         return 'message-game-over';
       case 'error':

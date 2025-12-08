@@ -22,25 +22,36 @@
   justify-content: center;
   width: 100%;
   height: 100%;
-  min-height: 70vh;
-  padding: clamp(1.5rem, 4vw, 3.5rem);
+  min-height: 0;
+  min-width: 0;
+  padding: clamp(0.25rem, 1vw, 0.5rem);
   box-sizing: border-box;
   background: var(--cl-tabletop-green);
-  border-radius: 2rem;
+  border-radius: 0.5rem;
+  /* Ensure board fills available space while maintaining aspect ratio */
+  aspect-ratio: 1 / 1;
+  max-width: 100%;
+  max-height: 100%;
 }
 
 .cl-board-container {
   position: relative;
-  padding: clamp(1.4rem, 3.5vw, 2.4rem);
-  border-radius: 1.6rem;
+  padding: clamp(0.5rem, 1.2vw, 1rem);
+  border-radius: 0.8rem;
   background: linear-gradient(145deg, #f8f1e2 0%, #e7dac2 40%, #ceb48a 100%);
-  border: clamp(0.4rem, 1vw, 0.6rem) solid var(--cl-board-wood);
-  box-shadow: 0 22px 48px rgba(0, 0, 0, 0.35);
-  width: min(100%, var(--cl-board-max-size));
+  border: clamp(0.2rem, 0.5vw, 0.35rem) solid var(--cl-board-wood);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+  /* Fill available space while maintaining square aspect ratio */
+  width: 100%;
+  height: 100%;
   aspect-ratio: 1 / 1;
+  max-width: 100%;
+  max-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .cl-board-grid {
@@ -48,9 +59,11 @@
   display: grid;
   width: 100%;
   height: 100%;
+  min-width: 0;
+  min-height: 0;
   gap: var(--cl-cell-gap);
   padding: var(--cl-cell-gap);
-  border-radius: 1.2rem;
+  border-radius: 1rem;
   background: linear-gradient(
         90deg,
         rgba(32, 23, 14, 0.12) 1px,
@@ -60,8 +73,9 @@
     linear-gradient(0deg, rgba(32, 23, 14, 0.12) 1px, transparent 1px) 0 0 /
       calc(100% / var(--cl-columns, 14)) calc(100% / var(--cl-rows, 14)),
     #efe3d0;
-  border: clamp(0.35rem, 0.8vw, 0.55rem) solid #201711;
-  box-shadow: inset 0 0 45px rgba(0, 0, 0, 0.28);
+  border: clamp(0.3rem, 0.7vw, 0.5rem) solid #201711;
+  box-shadow: inset 0 0 35px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
 }
 
 .cl-cell {

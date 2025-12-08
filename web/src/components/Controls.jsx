@@ -136,14 +136,11 @@ const Controls = ({
   onDisprove,
   onAccusation,
   onChat,
-  onPing,
   onEndTurn,
 }) => {
   const [showMoveForm, setShowMoveForm] = useState(false);
   const [showSuggestionForm, setShowSuggestionForm] = useState(false);
   const [showAccusationForm, setShowAccusationForm] = useState(false);
-  const [showChatForm, setShowChatForm] = useState(false);
-  const [chatMessage, setChatMessage] = useState("");
 
   const currentRoom =
     currentPlayer?.position?.zone === "ROOM" ? currentPlayer.position.id : null;
@@ -157,10 +154,25 @@ const Controls = ({
   const canMove = canAct && legalMoveOptions.length > 0;
   const canSuggest = canAct && !!currentRoom;
   const canAccuse = canAct && !accusationResult && !solutionRevealed;
-  const pendingDisproveForMe =
-    awaitingDisprove &&
-    refutePrompt &&
-    refutePrompt.nextPlayerId === currentPlayer?.id;
+  
+  // Check if it's this player's turn to disprove using the server's pendingSuggestion structure
+  // The server uses pending.order[pending.index] to determine the current player
+  const pendingDisproveForMe = (() => {
+    if (!awaitingDisprove || !refutePrompt || !currentPlayer?.id) return false;
+    
+    // If refutePrompt has order and index (from GAME_STATE), use that
+    if (refutePrompt.order && typeof refutePrompt.index === 'number') {
+      const expectedPlayerId = refutePrompt.order[refutePrompt.index];
+      return expectedPlayerId === currentPlayer.id;
+    }
+    
+    // Fallback to nextPlayerId (from PROMPT_DISPROVE message)
+    if (refutePrompt.nextPlayerId) {
+      return refutePrompt.nextPlayerId === currentPlayer.id;
+    }
+    
+    return false;
+  })();
 
   const primaryActionRef = useRef(null);
   const disproveSelectRef = useRef(null);
@@ -208,6 +220,39 @@ const Controls = ({
 
   useEffect(() => {
     const handleKeyDown = (event) => {
+      // Don't trigger shortcuts if user is typing in an input/textarea
+      const target = event.target;
+      const isInputFocused = target.tagName === 'INPUT' || 
+                            target.tagName === 'TEXTAREA' || 
+                            target.isContentEditable;
+      
+      // Don't trigger shortcuts if any form is shown (user might be typing)
+      const anyFormShown = showMoveForm || showSuggestionForm || 
+                          showAccusationForm;
+      
+      // Handle Escape key (works even when forms are open or input is focused)
+      if (event.key === 'Escape') {
+        if (showMoveForm) {
+          setShowMoveForm(false);
+          event.preventDefault();
+          return;
+        }
+        if (showSuggestionForm) {
+          setShowSuggestionForm(false);
+          event.preventDefault();
+          return;
+        }
+        if (showAccusationForm) {
+          setShowAccusationForm(false);
+          event.preventDefault();
+          return;
+        }
+      }
+      
+      // Don't trigger other shortcuts if input is focused or forms are shown
+      if (isInputFocused || anyFormShown) return;
+      
+      // Only handle game action shortcuts if it's your turn and you can act
       if (!canAct || !isMyTurn) return;
       if (event.defaultPrevented) return;
 
@@ -242,7 +287,7 @@ const Controls = ({
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canAct, canMove, canSuggest, canAccuse, isMyTurn, onEndTurn]);
+  }, [canAct, canMove, canSuggest, canAccuse, isMyTurn, onEndTurn, showMoveForm, showSuggestionForm, showAccusationForm]);
 
   const handleMove = (e) => {
     e.preventDefault();
@@ -263,6 +308,11 @@ const Controls = ({
     const weaponName = formData.get("weaponId");
     const suspectId = suspectName ? suspectNameToId(suspectName) : null;
     const weaponId = weaponName ? weaponNameToId(weaponName) : null;
+    
+    if (!suspectId || !weaponId) {
+      return;
+    }
+    
     onSuggestion(suspectId, weaponId);
     setShowSuggestionForm(false);
   };
@@ -285,22 +335,17 @@ const Controls = ({
     const formData = new FormData(e.target);
     const cardId = formData.get("cardId");
 
-    if (canDisprove && !cardId) {
+    // If player can disprove, they must select a card
+    if (canDisprove && (!cardId || cardId.trim() === "")) {
       // You must choose a card if you have one that can disprove
       return;
     }
 
-    onDisprove(cardId || null);
+      // If player cannot disprove, send null (empty string from hidden input becomes null)
+    const finalCardId = (cardId && cardId.trim() !== "") ? cardId : null;
+    onDisprove(finalCardId);
   };
 
-  const handleChat = (e) => {
-    e.preventDefault();
-    if (chatMessage.trim()) {
-      onChat(chatMessage.trim());
-      setChatMessage("");
-      setShowChatForm(false);
-    }
-  };
 
   const renderAwaitingBanner = () => {
     if (!awaitingDisprove) return null;
@@ -320,31 +365,10 @@ const Controls = ({
 
   return (
     <div className="controls">
-      <h3>Game Controls</h3>
 
       {renderAwaitingBanner()}
 
       {!gameStarted && <div className="banner info">Game not started yet.</div>}
-
-      <div className="basic-controls">
-        <button onClick={onPing} className="control-btn ping-btn">
-          Ping Server
-        </button>
-
-        <button
-          onClick={() => setShowChatForm(!showChatForm)}
-          className="control-btn chat-btn">
-          Send Chat
-        </button>
-
-        <button
-          onClick={onEndTurn}
-          className="control-btn end-turn-btn"
-          disabled={!canAct}
-          title={canAct ? "End your turn" : "Cannot end turn right now"}>
-          End Turn
-        </button>
-      </div>
 
       {gameStarted && (
         <div className="game-controls">
@@ -385,6 +409,14 @@ const Controls = ({
                 : "You already acted or the game has ended"
             }>
             Make Accusation
+          </button>
+
+          <button
+            onClick={onEndTurn}
+            className="control-btn end-turn-btn"
+            disabled={!canAct}
+            title={canAct ? "End your turn" : "Cannot end turn right now"}>
+            End Turn
           </button>
         </div>
       )}
@@ -512,10 +544,13 @@ const Controls = ({
                 </select>
               </div>
             ) : (
-              <p className="form-help-text">
-                You do not have any cards that can disprove this suggestion.
-                Submit to pass.
-              </p>
+              <>
+                <p className="form-help-text">
+                  You do not have any cards that can disprove this suggestion.
+                  Submit to pass.
+                </p>
+                <input type="hidden" name="cardId" value="" />
+              </>
             )}
             <div className="form-actions">
               <button type="submit">
@@ -585,31 +620,6 @@ const Controls = ({
           {accusationResult.correct
             ? "Your accusation was correct!"
             : "Your accusation was incorrect."}
-        </div>
-      )}
-
-      {showChatForm && (
-        <div className="control-form">
-          <h4>Send Chat Message</h4>
-          <form onSubmit={handleChat}>
-            <div className="form-group">
-              <label>Message:</label>
-              <input
-                type="text"
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                placeholder="Enter your message"
-                maxLength={256}
-                required
-              />
-            </div>
-            <div className="form-actions">
-              <button type="submit">Send</button>
-              <button type="button" onClick={() => setShowChatForm(false)}>
-                Cancel
-              </button>
-            </div>
-          </form>
         </div>
       )}
     </div>
